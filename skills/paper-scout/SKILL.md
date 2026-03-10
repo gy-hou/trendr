@@ -1,0 +1,290 @@
+---
+name: paper-scout
+description: 9 源学术论文搜索与筛选（arXiv, Semantic Scholar, OpenAlex, PubMed, CrossRef, DBLP, Europe PMC, bioRxiv, Papers with Code），利用本机已安装工具，零额外依赖
+metadata: {"openclaw": {}}
+---
+
+# Paper Scout Skill
+
+9 源学术论文发现与筛选。所有 API 均为公开免费，直接通过 web_fetch 调用，无需安装任何额外 MCP server。
+
+> ⚠️ 每次执行搜索任务前，完整阅读本文件。不要跳过任何部分。
+
+## 搜索源总览
+
+| # | 源 | 覆盖范围 | 速率限制 | 需要 Key |
+|---|------|---------|---------|---------|
+| 1 | arXiv | CS/数学/物理预印本 | 3秒/次 | 否 |
+| 2 | Semantic Scholar | 2亿+ 论文，引用网络 | 100次/5分钟(有key) | 推荐 |
+| 3 | OpenAlex | 2.5亿+ 作品，全开放 | 无限制(有email更快) | 否 |
+| 4 | PubMed | 生物医学 3600万+ | 3次/秒(有key) | 否 |
+| 5 | CrossRef | DOI 注册论文 1.4亿+ | 友好限制 | 否 |
+| 6 | DBLP | 计算机科学文献库 | 宽松 | 否 |
+| 7 | Europe PMC | 欧洲生命科学 4000万+ | 宽松 | 否 |
+| 8 | bioRxiv | 生物学预印本 | 宽松 | 否 |
+| 9 | Papers with Code | 带代码的 ML 论文 | 宽松 | 否 |
+
+## 搜索执行策略
+
+**不要一次性调用 9 个源。** 按研究领域选择最相关的 3-5 个源：
+
+- **CS / AI / ML 方向** → arXiv + Semantic Scholar + OpenAlex + DBLP + Papers with Code
+- **生物医学方向** → PubMed + Europe PMC + bioRxiv + Semantic Scholar + OpenAlex
+- **通用/跨学科** → Semantic Scholar + OpenAlex + CrossRef + arXiv
+
+每个源之间等待 2-3 秒避免速率限制。
+
+---
+
+## 各源搜索命令
+
+### 源 1: arXiv（首选 — 用已安装的 arxiv-watcher）
+
+优先使用已安装的 arxiv-watcher 技能：
+```
+用 arxiv-watcher 搜索关键词 "[QUERY]"，限制类别 [cs.AI/cs.CL/cs.LG]，时间范围 [DATE_FROM] 到今天，最多 20 篇
+```
+
+备用 — 直接调 arXiv API：
+```
+web_fetch: { url: "http://export.arxiv.org/api/query?search_query=all:[QUERY]&start=0&max_results=20&sortBy=submittedDate&sortOrder=descending", maxChars: 50000 }
+```
+注意：arXiv API 返回 XML/Atom 格式。提取 `<entry>` 中的 title, author, summary, id, published。
+
+### 源 2: Semantic Scholar（引用数据最丰富）
+
+**关键词搜索：**
+```
+web_fetch: { url: "https://api.semanticscholar.org/graph/v1/paper/search?query=[QUERY_URL_ENCODED]&limit=20&fields=paperId,title,authors,year,abstract,citationCount,externalIds,venue,openAccessPdf", maxChars: 50000 }
+```
+
+**按 arXiv ID 查详情：**
+```
+web_fetch: { url: "https://api.semanticscholar.org/graph/v1/paper/ARXIV:[PAPER_ID]?fields=title,abstract,authors,year,citationCount,venue,references.title,citations.title,openAccessPdf", maxChars: 40000 }
+```
+
+**按作者搜索：**
+```
+web_fetch: { url: "https://api.semanticscholar.org/graph/v1/author/search?query=[AUTHOR_NAME]&limit=5&fields=name,paperCount,citationCount,hIndex", maxChars: 10000 }
+```
+
+### 源 3: OpenAlex（最大开放学术数据库，无需 Key）
+
+**关键词搜索：**
+```
+web_fetch: { url: "https://api.openalex.org/works?search=[QUERY_URL_ENCODED]&per_page=20&sort=relevance_score:desc&filter=from_publication_date:2024-01-01&select=id,doi,title,authorships,publication_year,cited_by_count,primary_location,abstract_inverted_index", maxChars: 50000 }
+```
+
+**按概念/领域过滤：**
+```
+web_fetch: { url: "https://api.openalex.org/works?search=[QUERY]&filter=concept.id:C154945302,from_publication_date:2024-01-01&per_page=20&sort=cited_by_count:desc", maxChars: 50000 }
+```
+常用 concept ID: C154945302 (AI), C108827166 (ML), C204321447 (NLP), C41008148 (CS)
+
+**注意**：OpenAlex 返回 `abstract_inverted_index`（倒排索引格式），需要重组为正常文本：将 JSON 的 key(词) 按 value(位置) 排序拼接。如果重组困难，可跳过 abstract 只取其他字段。
+
+### 源 4: PubMed（生物医学必用）
+
+**搜索获取 ID 列表：**
+```
+web_fetch: { url: "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&term=[QUERY_URL_ENCODED]&retmax=20&retmode=json&sort=date&mindate=2024&maxdate=2026", maxChars: 10000 }
+```
+
+**用 ID 获取详情（逗号分隔多个 ID）：**
+```
+web_fetch: { url: "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?db=pubmed&id=[ID1],[ID2],[ID3]&retmode=json", maxChars: 50000 }
+```
+
+PubMed 是两步操作：先搜 ID，再查详情。
+
+### 源 5: CrossRef（按 DOI 查引用/元数据最权威）
+
+**关键词搜索：**
+```
+web_fetch: { url: "https://api.crossref.org/works?query=[QUERY_URL_ENCODED]&rows=20&sort=relevance&filter=from-pub-date:2024-01-01&select=DOI,title,author,published-print,is-referenced-by-count,abstract,container-title", maxChars: 50000 }
+```
+
+**按 DOI 精确查询：**
+```
+web_fetch: { url: "https://api.crossref.org/works/[DOI_URL_ENCODED]", maxChars: 20000 }
+```
+
+### 源 6: DBLP（计算机科学最全）
+
+**搜索：**
+```
+web_fetch: { url: "https://dblp.org/search/publ/api?q=[QUERY_URL_ENCODED]&format=json&h=20", maxChars: 30000 }
+```
+
+DBLP 返回字段: title, authors (array), venue, year, doi, url。无 abstract 和引用数——需配合 Semantic Scholar 补充。
+
+### 源 7: Europe PMC（生命科学 + 开放获取）
+
+**搜索：**
+```
+web_fetch: { url: "https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=[QUERY_URL_ENCODED]&format=json&pageSize=20&sort=RELEVANCE&resultType=core", maxChars: 50000 }
+```
+
+返回: title, authorString, journalTitle, pubYear, citedByCount, doi, abstractText, pmid。
+
+### 源 8: bioRxiv（生物学预印本）
+
+**按日期范围搜索（格式: YYYY-MM-DD）：**
+```
+web_fetch: { url: "https://api.biorxiv.org/details/biorxiv/[DATE_FROM]/[DATE_TO]/0/20", maxChars: 50000 }
+```
+
+**注意**：bioRxiv API 不支持关键词搜索，只支持按日期范围浏览。获取结果后需自行过滤标题和摘要中的关键词。非生物方向可跳过此源。
+
+### 源 9: Papers with Code（带代码实现的 ML 论文）
+
+**搜索：**
+```
+web_fetch: { url: "https://paperswithcode.com/api/v1/papers/?q=[QUERY_URL_ENCODED]&items_per_page=20&ordering=-proceeding", maxChars: 40000 }
+```
+
+**获取论文代码仓库：**
+```
+web_fetch: { url: "https://paperswithcode.com/api/v1/papers/[PAPER_ID]/repositories/", maxChars: 10000 }
+```
+
+适合寻找有开源实现的论文，特别是 ML/DL 方向。
+
+---
+
+## 补充搜索（已安装工具）
+
+如果以上 API 返回不足，用已安装的 skill 补充：
+
+**tavily-search（AI 优化跨源搜索）：**
+```
+用 tavily-search 搜索 "academic paper: [QUERY] site:arxiv.org OR site:semanticscholar.org"
+```
+
+**deep-research（复杂主题深挖，token 消耗高，慎用）：**
+```
+用 deep-research 调研 "[TOPIC]"，重点关注学术论文和技术报告
+```
+
+**browser（JS 重页面兜底）：**
+当 web_fetch 返回乱码或空内容时（Google Scholar 等），用 browser 工具。
+
+---
+
+## 相关性评分标准
+
+对每篇论文评 1-5 分。同时计算加权分（可选，给 Lead 做参考）：
+
+| 分数 | 含义 | 标准 |
+|------|------|------|
+| 5 | 核心论文 | 直接回答研究问题，方法完全匹配 |
+| 4 | 高度相关 | 方法或问题紧密相关，值得精读 |
+| 3 | 有参考价值 | 背景知识或间接相关 |
+| 2 | 边缘相关 | 仅部分主题重叠，一般不收录 |
+| 1 | 不相关 | 不记录 |
+
+加分因素（在基础分上 +0.5，不超过 5）：
+- 引用数 > 100 且发表 < 2 年
+- 来自顶会（NeurIPS, ICML, ACL, CVPR, ICLR 等）
+- 有开源代码
+
+---
+
+## 输出格式
+
+### 创建项目目录
+
+```
+exec: mkdir -p ~/research/[PROJECT]/{papers,notes}
+```
+
+### candidates.csv（必须输出）
+
+```
+write: ~/research/[PROJECT]/candidates.csv
+```
+
+严格使用此 header：
+```csv
+paper_id,title,authors,year,source,venue,citation_count,relevance_score,has_code,abstract_snippet
+```
+
+字段规则：
+- `paper_id`: arXiv ID（如 2301.12345）或 DOI 或 S2 paper ID
+- `authors`: 分号分隔，姓在前（如 "Smith J;Lee K"）
+- `source`: arxiv | semantic_scholar | openalex | pubmed | crossref | dblp | europepmc | biorxiv | paperswithcode
+- `venue`: 发表场所（如 "NeurIPS 2024"、"arXiv preprint"）
+- `relevance_score`: 1-5 浮点数（含加分后的）
+- `has_code`: yes | no | unknown
+- `abstract_snippet`: 前 150 字符，内部逗号替换为分号
+
+### search_log.md（推荐输出）
+
+```
+write: ~/research/[PROJECT]/search_log.md
+```
+
+```markdown
+# Search Log: [PROJECT]
+Date: [YYYY-MM-DD]
+
+## Query 1: "[query text]"
+- arXiv: X results
+- Semantic Scholar: Y results
+- OpenAlex: Z results
+- Total unique after dedup: N
+
+## Query 2: "[query text]"
+...
+
+## Summary
+- Total queries: N
+- Total raw results: X
+- After dedup: Y
+- Score >= 3: Z (saved to candidates.csv)
+- Score >= 4: W (recommended for deep analysis)
+```
+
+---
+
+## 去重逻辑
+
+同一篇论文可能出现在多个源中。去重规则：
+
+1. **arXiv ID 匹配**：如果两条结果的 arXiv ID 相同 → 保留引用数更高的那条
+2. **DOI 匹配**：DOI 相同 → 合并
+3. **标题模糊匹配**：标题相似度 > 90%（忽略大小写和标点）→ 保留来源更权威的
+
+去重后在 search_log.md 中记录合并了多少条。
+
+---
+
+## 速率限制速查
+
+| 源 | 限制 | 建议间隔 |
+|----|------|---------|
+| arXiv | 3 秒/次 | `exec: sleep 3` |
+| Semantic Scholar (有 key) | 100 次/5 分钟 | `exec: sleep 1` |
+| Semantic Scholar (无 key) | 10 次/5 分钟 | `exec: sleep 30` |
+| OpenAlex | 无硬限（有 email 更宽松） | `exec: sleep 1` |
+| PubMed | 3 次/秒 | `exec: sleep 1` |
+| CrossRef | 友好限制 | `exec: sleep 1` |
+| DBLP | 宽松 | `exec: sleep 1` |
+| Europe PMC | 宽松 | `exec: sleep 1` |
+| bioRxiv | 宽松 | `exec: sleep 2` |
+| Papers with Code | 宽松 | `exec: sleep 1` |
+
+---
+
+## 故障处理
+
+| 问题 | 处理 |
+|------|------|
+| 任何 API 返回 429 | 等 60 秒再试 |
+| 任何 API 返回 5xx | 跳过该源，用其他源补充 |
+| OpenAlex abstract 是倒排索引 | 跳过 abstract，只用其他字段 |
+| bioRxiv 不支持关键词搜索 | 拿到结果后用标题/摘要关键词过滤 |
+| DBLP 无 abstract | 用 paper_id 到 Semantic Scholar 补充 |
+| PubMed 需要两步查询 | 先 esearch 拿 ID，再 esummary 拿详情 |
+| web_fetch 返回空/乱码 | 换用 browser 工具或 tavily-search |
+| 所有方法都无结果 | 扩大关键词范围或报告"该方向论文稀少" |
