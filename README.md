@@ -1,70 +1,73 @@
 <p align="center">
   <h1 align="center">TrendR</h1>
-  <p align="center"><strong>Trend Research — Automated Literature Review + Obsidian Knowledge Management</strong></p>
-  <p align="center">3 Agents · 4 Skills · 9-Source Search · Zero Extra MCP Dependencies</p>
+  <p align="center"><strong>趋势研究 — 自动化文献综述 + Obsidian 知识管理</strong></p>
+  <p align="center">3 个 Agent · 4 个 Skill · 9 源搜索 · 零额外 MCP 依赖</p>
   <p align="center">
-    <a href="#installation">Install</a> · <a href="#usage">Usage</a> · <a href="#architecture">Architecture</a> · <a href="#comparison">Comparison</a>
+    <a href="#安装">安装</a> · <a href="#使用方法">使用</a> · <a href="#系统架构">架构</a> · <a href="#横向对比">对比</a>
+  </p>
+  <p align="center">
+    <a href="./README_EN.md">English</a> | 中文
   </p>
 </p>
 
 ---
 
-Tell your Agent one sentence. It does the rest.
+告诉你的 Agent 一句话，剩下的它来做。
 
 ```
-You: "Survey the latest advances in multi-agent systems for finance"
+你: "调研多智能体系统在金融领域的最新进展"
 
 TrendR:
-  → 9-source parallel search, 47 candidate papers found
-  → Deep-read 12 papers, structured notes + comparison matrix
-  → 21KB literature review (taxonomy, gap analysis, BibTeX)
-  → Auto-archived to Obsidian, paper pool persisted
-  → Notifies you: done ✅
+  → 9 源并行搜索，找到 47 篇候选论文
+  → 精读 12 篇论文，结构化笔记 + 对比矩阵
+  → 21KB 文献综述（分类体系、差距分析、BibTeX）
+  → 自动归档到 Obsidian，论文池持久化
+  → 通知你：完成 ✅
 ```
 
-Inspired by [karpathy/autoresearch](https://github.com/karpathy/autoresearch)'s autonomous research loop, redesigned from "LLM training optimization" to "paper search + literature review", from NVIDIA H100 to Mac Apple Silicon, from GPU bills to ~$1/run.
+灵感来源于 [karpathy/autoresearch](https://github.com/karpathy/autoresearch) 的自主研究循环，从「LLM 训练优化」重新设计为「论文搜索 + 文献综述」，从 NVIDIA H100 到 Mac Apple Silicon，从 GPU 账单到约 ¥7/次。
 
 ---
 
-## What It Solves
+## 它解决什么问题
 
-| Step | Manual | TrendR |
-|------|--------|--------|
-| Cross-platform paper search | 3-4 hours | 5 min (9 sources parallel) |
-| Screen relevant papers | 2-3 hours | Auto-scored 1-5 + dedup |
-| Deep-read + take notes | 8-12 hours | Structured extraction (problem/method/results/limitations) |
-| Write review report | 6-8 hours | Auto-generated (taxonomy + analysis + research gaps) |
-| Compile references | 1-2 hours | Auto BibTeX |
-| Archive to knowledge base | 1 hour | Auto-sync to Obsidian |
-| **Total** | **~20-30 hours** | **~30 min wait** |
+| 步骤 | 手动 | TrendR |
+|------|------|--------|
+| 跨平台论文搜索 | 3-4 小时 | 5 分钟（9 源并行） |
+| 筛选相关论文 | 2-3 小时 | 自动评分 1-5 + 去重 |
+| 精读 + 做笔记 | 8-12 小时 | 结构化提取（问题/方法/结果/局限） |
+| 撰写综述报告 | 6-8 小时 | 自动生成（分类体系 + 分析 + 研究空白） |
+| 整理参考文献 | 1-2 小时 | 自动 BibTeX |
+| 归档到知识库 | 1 小时 | 自动同步到 Obsidian |
+| **合计** | **约 20-30 小时** | **约 30 分钟等待** |
 
 ---
 
-## What's Inside
+## 包含内容
 
-| Type | Name | Role |
+| 类型 | 名称 | 职责 |
 |------|------|------|
-| Agent | `paper-scout` | 9-source search + scoring + dedup |
-| Agent | `paper-analyzer` | Deep-read + structured notes + comparison matrix |
-| Agent | `review-lead` | Orchestrate pipeline + write review + Obsidian persistence |
-| Skill | `paper-scout` | 9 academic API call handbook (10KB) |
-| Skill | `paper-analyzer` | Structured extraction templates |
-| Skill | `review-writer` | Review writing template + quality checklist |
-| Skill | `research-vault` | Obsidian persistence + paper pool index |
+| Agent | `paper-scout` | 9 源搜索 + 评分 + 去重 |
+| Agent | `paper-analyzer` | 精读 + 结构化笔记 + 对比矩阵 |
+| Agent | `review-lead` | 编排流水线 + 撰写综述 + Obsidian 持久化 |
+| Skill | `paper-scout` | 9 个学术 API 调用手册（10KB） |
+| Skill | `paper-analyzer` | 结构化提取模板 |
+| Skill | `review-writer` | 综述写作模板 + 质量清单 |
+| Skill | `research-vault` | Obsidian 持久化 + 论文池索引 |
 
 ---
 
-## Prerequisites
+## 前置要求
 
-- macOS or Linux
+- macOS 或 Linux
 - Node.js 18+
-- [OpenClaw](https://openclaw.ai) installed with `openclaw onboard` completed
-- [Obsidian](https://obsidian.md) installed
-- Any LLM supported by OpenClaw (MiniMax M2.5 / Claude / GPT / etc.)
+- 已安装 [OpenClaw](https://openclaw.ai) 并完成 `openclaw onboard`
+- 已安装 [Obsidian](https://obsidian.md)
+- OpenClaw 支持的任意 LLM（MiniMax M2.5 / Claude / GPT 等）
 
 ---
 
-## Installation
+## 安装
 
 ```bash
 git clone https://github.com/yourname/trendr.git
@@ -73,31 +76,31 @@ chmod +x install.sh
 ./install.sh
 ```
 
-Custom Obsidian vault path:
+自定义 Obsidian 仓库路径：
 
 ```bash
 OBSIDIAN_VAULT="/your/vault/path" ./install.sh
 ```
 
-### What the Installer Does (8 Steps)
+### 安装器做了什么（8 步）
 
-| Step | Action |
-|------|--------|
-| 0 | Detect environment: Node.js, npx, OpenClaw, workspace, Obsidian vault |
-| 1 | Install 7 dependency skills via ClawHub (arxiv-watcher, tavily-search, summarize, deep-research, playwright-mcp, agent-browser, obsidian) |
-| 2 | Install Playwright browser (chromium) |
-| 3 | Copy 3 Agents → `workspace/agents/` |
-| 4 | Copy 4 Skills → `workspace/skills/` |
-| 5 | Detect Obsidian vault path, inject into skill configs |
-| 6 | Initialize Obsidian `Research/` directory + paper pool + templates, sync existing data |
-| 7 | Append TrendR workflow to AGENTS.md (with mandatory Obsidian auto-save) |
-| 8 | Prompt user to verify `openclaw.json` config |
+| 步骤 | 动作 |
+|------|------|
+| 0 | 检测环境：Node.js、npx、OpenClaw、workspace、Obsidian vault |
+| 1 | 通过 ClawHub 安装 7 个依赖 Skill（arxiv-watcher、tavily-search、summarize、deep-research、playwright-mcp、agent-browser、obsidian） |
+| 2 | 安装 Playwright 浏览器（chromium） |
+| 3 | 复制 3 个 Agent → `workspace/agents/` |
+| 4 | 复制 4 个 Skill → `workspace/skills/` |
+| 5 | 检测 Obsidian vault 路径，注入到 Skill 配置中 |
+| 6 | 初始化 Obsidian `Research/` 目录 + 论文池 + 模板，同步已有数据 |
+| 7 | 将 TrendR 工作流追加到 AGENTS.md（含强制 Obsidian 自动保存） |
+| 8 | 提示用户验证 `openclaw.json` 配置 |
 
-### Post-Install: Verify openclaw.json
+### 安装后：验证 openclaw.json
 
-Ensure `~/.openclaw/openclaw.json` contains:
+确保 `~/.openclaw/openclaw.json` 包含以下内容：
 
-**1. agents.list** — register the three subagents:
+**1. agents.list** — 注册三个子 Agent：
 
 ```json
 {
@@ -118,7 +121,7 @@ Ensure `~/.openclaw/openclaw.json` contains:
 }
 ```
 
-**2. skills.entries** — enable all relevant skills:
+**2. skills.entries** — 启用所有相关 Skill：
 
 ```json
 "paper-scout": { "enabled": true },
@@ -127,9 +130,9 @@ Ensure `~/.openclaw/openclaw.json` contains:
 "research-vault": { "enabled": true }
 ```
 
-**3. maxTokens** >= 32768 for your model (otherwise analyzer output gets truncated)
+**3. maxTokens** >= 32768（否则 analyzer 输出会被截断）
 
-Then:
+然后：
 
 ```bash
 openclaw gateway restart
@@ -137,266 +140,266 @@ openclaw gateway restart
 
 ---
 
-## Usage
+## 使用方法
 
 ```bash
-# New literature review
-"Survey the latest advances in [TOPIC]"
+# 新建文献综述
+"调研 [主题] 的最新进展"
 
-# Search papers
-"Search papers on autonomous AI agents, focus on 2024-2025, prefer those with code"
+# 搜索论文
+"搜索关于自主 AI Agent 的论文，聚焦 2024-2025，偏好有代码的"
 
-# Query paper pool
-"Find papers about transformer in my paper pool"
-"Paper pool stats by project"
+# 查询论文池
+"在我的论文池中查找关于 transformer 的论文"
+"按项目统计论文池"
 
-# Continue a project
-"Continue rl-multi-agent-finance, add market making direction"
+# 继续一个项目
+"继续 rl-multi-agent-finance 项目，新增做市方向"
 
-# Sync to Obsidian
-"Sync research results to Obsidian"
+# 同步到 Obsidian
+"将研究成果同步到 Obsidian"
 
-# Daily tracking
-"Set up daily arXiv cs.AI check at 9am"
+# 每日追踪
+"设置每天早上 9 点的 arXiv cs.AI 追踪"
 ```
 
 ---
 
-## Architecture
+## 系统架构
 
-### System Overview
+### 整体概览
 
 ```
 ┌──────────────────────────────────────────────────────────┐
-│                         User                              │
-│                Telegram / Feishu / Web                     │
+│                         用户                              │
+│                Telegram / 飞书 / Web                      │
 └─────────────────────┬────────────────────────────────────┘
                       ▼
 ┌──────────────────────────────────────────────────────────┐
-│           OpenClaw Gateway (runs locally)                  │
+│           OpenClaw Gateway（本地运行）                      │
 │                                                          │
 │  ┌─ main agent ───────────────────────────────────────┐  │
-│  │  Receive → Decompose → Dispatch → Synthesize       │  │
+│  │  接收 → 分解 → 分派 → 综合                           │  │
 │  └──────┬──────────────┬──────────────┬───────────────┘  │
 │         ▼              ▼              ▼                   │
 │  ┌───────────┐  ┌───────────┐  ┌───────────┐           │
 │  │  paper-   │  │  paper-   │  │  review-  │           │
 │  │  scout    │  │  analyzer │  │  lead     │           │
-│  │  Search   │  │  Read     │  │  Write    │           │
-│  │  Score    │  │  Extract  │  │  Archive  │           │
+│  │  搜索     │  │  精读     │  │  撰写     │           │
+│  │  评分     │  │  提取     │  │  归档     │           │
 │  └─────┬─────┘  └─────┬─────┘  └─────┬─────┘           │
 │        │              │              │                   │
 │  ┌─────▼──────────────▼──────────────▼───────────────┐  │
-│  │  Skills (Markdown instructions for tools)          │  │
+│  │  Skills（Markdown 格式的工具指令）                    │  │
 │  ├────────────────────────────────────────────────────┤  │
-│  │  Tools (exec / web_fetch / read / write / browser) │  │
+│  │  Tools（exec / web_fetch / read / write / browser） │  │
 │  └────────────────────────────────────────────────────┘  │
 └─────────┬───────────────────────────────┬────────────────┘
           ▼                               ▼
  ┌─────────────────┐          ┌──────────────────────┐
- │  9 Academic APIs │          │  Obsidian Vault       │
- │  (all free)      │          │  Pool + Cards + Reviews│
+ │  9 个学术 API    │          │  Obsidian Vault       │
+ │  （全部免费）     │          │  论文池 + 卡片 + 综述  │
  └─────────────────┘          └──────────────────────┘
 ```
 
-### Pipeline
+### 流水线
 
 ```
-Phase 1: Search ──→ candidates.csv (40-100 papers)
-                     search_log.md
+阶段 1: 搜索 ──→ candidates.csv（40-100 篇论文）
+                  search_log.md
          │
-Phase 2: Analyze ─→ notes/*.md (10-30 structured notes)
-                     matrix.csv (comparison matrix)
+阶段 2: 分析 ──→ notes/*.md（10-30 篇结构化笔记）
+                  matrix.csv（对比矩阵）
          │
-Phase 3: Gap Check → insufficient? → back to Phase 1
-                     sufficient?  → Phase 4
+阶段 3: 缺口检查 → 不够？→ 回到阶段 1
+                   够了？→ 阶段 4
          │
-Phase 4: Write ───→ review.md (15-25KB literature review)
-                     references.bib
+阶段 4: 撰写 ──→ review.md（15-25KB 文献综述）
+                  references.bib
          │
-Phase 5: Persist ─→ Obsidian paper-pool.csv (cumulative, deduped)
-                     Obsidian papers/*.md (cards with wiki-links)
-                     Obsidian reviews/project/ (archived)
-                     Obsidian daily/date.md (research log)
+阶段 5: 持久化 → Obsidian paper-pool.csv（累积去重）
+                  Obsidian papers/*.md（带 wiki-links 的卡片）
+                  Obsidian reviews/project/（归档）
+                  Obsidian daily/date.md（研究日志）
          │
-Phase 6: Report ──→ Notify user via Telegram/Feishu
+阶段 6: 报告 ──→ 通过 Telegram/飞书 通知用户
 ```
 
-### 9-Source Search Coverage
+### 9 源搜索覆盖
 
-All APIs are public and free. Called directly via `web_fetch` — no MCP server needed:
+所有 API 均为公开免费，通过 `web_fetch` 直接调用——无需额外 MCP 服务：
 
-| # | Source | Coverage | Key Required |
-|---|--------|----------|-------------|
-| 1 | arXiv | CS/Math/Physics preprints | No |
-| 2 | Semantic Scholar | 200M+ papers, citation graph | Recommended (free) |
-| 3 | OpenAlex | 250M+ works, fully open | No |
-| 4 | PubMed | 36M+ biomedical | No |
-| 5 | CrossRef | 140M+ DOI-registered | No |
-| 6 | DBLP | Computer science literature | No |
-| 7 | Europe PMC | 40M+ life sciences | No |
-| 8 | bioRxiv | Biology preprints | No |
-| 9 | Papers with Code | ML papers with code repos | No |
+| # | 来源 | 覆盖范围 | 需要密钥 |
+|---|------|----------|---------|
+| 1 | arXiv | 计算机/数学/物理预印本 | 否 |
+| 2 | Semantic Scholar | 2 亿+ 论文，引用图谱 | 推荐（免费） |
+| 3 | OpenAlex | 2.5 亿+ 作品，完全开放 | 否 |
+| 4 | PubMed | 3600 万+ 生物医学 | 否 |
+| 5 | CrossRef | 1.4 亿+ DOI 注册 | 否 |
+| 6 | DBLP | 计算机科学文献 | 否 |
+| 7 | Europe PMC | 4000 万+ 生命科学 | 否 |
+| 8 | bioRxiv | 生物学预印本 | 否 |
+| 9 | Papers with Code | ML 论文 + 代码仓库 | 否 |
 
-The agent auto-selects 3-5 most relevant sources based on research domain.
+Agent 根据研究领域自动选择 3-5 个最相关的来源。
 
-### Obsidian Knowledge Base
+### Obsidian 知识库
 
 ```
 [Vault]/Research/
 ├── _index/
-│   └── paper-pool.csv          ← Paper pool (cumulative across projects)
+│   └── paper-pool.csv          ← 论文池（跨项目累积）
 ├── papers/
-│   └── 2301.12345.md           ← Paper cards (YAML frontmatter + wiki-links)
+│   └── 2301.12345.md           ← 论文卡片（YAML frontmatter + wiki-links）
 ├── reviews/
 │   └── project-name/
 │       ├── review.md
 │       ├── references.bib
 │       └── matrix.csv
 ├── daily/
-│   └── 2026-03-10.md           ← Daily research log
+│   └── 2026-03-10.md           ← 每日研究日志
 └── templates/
 ```
 
-Paper pool CSV tracks status progression: `candidate` → `analyzed` → `cited_in_review`
+论文池 CSV 追踪状态流转：`candidate` → `analyzed` → `cited_in_review`
 
-### Anti-Forgetting Mechanism
+### 防遗忘机制
 
-When using non-frontier models (e.g., MiniMax M2.5), agents may forget to read Skill files. TrendR uses three defensive layers:
+使用非前沿模型（如 MiniMax M2.5）时，Agent 可能忘记读取 Skill 文件。TrendR 采用三层防御：
 
-| Layer | Mechanism |
-|-------|-----------|
-| AGENTS.md | Hard-coded rule: "task description MUST include 'read skills/xxx/SKILL.md first'" |
-| SOUL.md | Warning at top: "⚠️ First step: read skills/xxx/SKILL.md" |
-| SKILL.md | Complete copy-paste commands instead of abstract instructions |
+| 层级 | 机制 |
+|------|------|
+| AGENTS.md | 硬编码规则："任务描述必须包含 '先读 skills/xxx/SKILL.md'" |
+| SOUL.md | 顶部警告："⚠️ 第一步：读 skills/xxx/SKILL.md" |
+| SKILL.md | 完整的可复制粘贴命令，而非抽象指令 |
 
 ---
 
-## Comparison
+## 横向对比
 
 ### TrendR vs autoresearch vs paper-distill-mcp
 
 ```
-              Discovery      Deep-Read      Review       Knowledge Mgmt
-             ──────────     ──────────    ──────────    ──────────
-autoresearch      ·              ·             ·              ·
+              论文发现      精读分析      文献综述      知识管理
+             ──────────   ──────────   ──────────   ──────────
+autoresearch      ·            ·            ·            ·
 
-distill-mcp   ████████          █             ·           ████
+distill-mcp   ████████        █            ·         ████
 
-TrendR        ████████       ████████      ████████      ████████
-              9-source       structured    full review   Obsidian + pool
+TrendR        ████████     ████████     ████████     ████████
+              9 源搜索     结构化笔记    完整综述     Obsidian + 论文池
 ```
 
-### Feature Matrix
+### 功能矩阵
 
-| Dimension | autoresearch | paper-distill-mcp | TrendR |
-|-----------|-------------|-------------------|--------|
-| **Purpose** | LLM training optimization | Paper discovery + push | **Full literature review pipeline** |
-| **Core loop** | Edit code → train 5min → eval | Search 9 sources → score → push | **Search → read → write review → archive** |
-| **Hardware** | NVIDIA H100 | Any (API calls) | **Mac / Linux (API calls)** |
-| **Cost per run** | GPU electricity | ~$3-8 (Claude/GPT) | **~$0-1 (MiniMax)** |
-| **Search sources** | N/A | 9 | **9** |
-| **Scoring** | val_bpb (hard metric) | 4-dim weighted (code) | 1-5 score (agent) |
-| **Paper pool** | N/A | ✅ Persistent | **✅ Obsidian CSV** |
-| **Deep reading** | N/A | ❌ One-line summary | **✅ Structured notes** |
-| **Comparison matrix** | N/A | ❌ | **✅ matrix.csv** |
-| **Literature review** | N/A | ❌ | **✅ Full review** |
-| **Obsidian** | N/A | ✅ Note cards | **✅ Cards + reviews + logs + pool** |
-| **Zotero** | N/A | ✅ | ❌ (extensible) |
-| **Dual AI review** | ❌ | ✅ | ❌ (extensible) |
-| **Agent architecture** | Single agent | No agent (pure tools) | **Multi-agent (3 subagents)** |
-| **Extra dependencies** | PyTorch + GPU | Python package | **None (web_fetch only)** |
-| **License** | MIT | AGPL-3.0 | **MIT** |
+| 维度 | autoresearch | paper-distill-mcp | TrendR |
+|------|-------------|-------------------|--------|
+| **定位** | LLM 训练优化 | 论文发现 + 推送 | **完整文献综述流水线** |
+| **核心循环** | 改代码 → 训练 5min → 评估 | 搜索 9 源 → 评分 → 推送 | **搜索 → 精读 → 写综述 → 归档** |
+| **硬件** | NVIDIA H100 | 任意（API 调用） | **Mac / Linux（API 调用）** |
+| **单次成本** | GPU 电费 | 约 ¥20-60（Claude/GPT） | **约 ¥0-7（MiniMax）** |
+| **搜索源** | N/A | 9 个 | **9 个** |
+| **评分** | val_bpb（硬指标） | 4 维加权（代码） | 1-5 分（Agent） |
+| **论文池** | N/A | ✅ 持久化 | **✅ Obsidian CSV** |
+| **精读** | N/A | ❌ 单行摘要 | **✅ 结构化笔记** |
+| **对比矩阵** | N/A | ❌ | **✅ matrix.csv** |
+| **文献综述** | N/A | ❌ | **✅ 完整综述** |
+| **Obsidian** | N/A | ✅ 笔记卡片 | **✅ 卡片 + 综述 + 日志 + 论文池** |
+| **Zotero** | N/A | ✅ | ❌（可扩展） |
+| **双 AI 审稿** | ❌ | ✅ | ❌（可扩展） |
+| **Agent 架构** | 单 Agent | 无 Agent（纯工具） | **多 Agent（3 个子 Agent）** |
+| **额外依赖** | PyTorch + GPU | Python 包 | **无（仅 web_fetch）** |
+| **许可证** | MIT | AGPL-3.0 | **MIT** |
 
-### Design Philosophy
+### 设计哲学
 
-**autoresearch** — *"Hand the experiment loop to AI"*. Human writes `program.md` (strategy), AI writes `train.py` (code). Elegant constraint design: single file, fixed 5-min budget, single metric. But GPU-only.
+**autoresearch** — *"把实验循环交给 AI"*。人写 `program.md`（策略），AI 写 `train.py`（代码）。优雅的约束设计：单文件、固定 5 分钟预算、单一指标。但需要 GPU。
 
-**paper-distill-mcp** — *"Hand the screening grunt-work to code"*. Search/score/dedup are deterministic ops — Python code does them 100x cheaper than LLMs. 19 tool functions, 4-dim scoring, paper pool state machine. Solid engineering. But stops at "push 6 papers with one-line summaries".
+**paper-distill-mcp** — *"把筛选苦力活交给代码"*。搜索/评分/去重是确定性操作——Python 代码比 LLM 便宜 100 倍。19 个工具函数、4 维评分、论文池状态机。工程扎实。但止步于"推送 6 篇论文 + 单行摘要"。
 
-**TrendR** — *"Hand the entire literature review to multi-agent collaboration"*. Paper search is cheap (free APIs). **Deep reading and review writing are the real value**. 3 specialized subagents, Skill files as executable knowledge, Obsidian for persistent knowledge. Zero extra dependencies — agents call public APIs directly.
+**TrendR** — *"把整个文献综述交给多 Agent 协作"*。论文搜索很便宜（免费 API）。**精读和综述撰写才是真正的价值**。3 个专业子 Agent、Skill 文件作为可执行知识、Obsidian 做持久化知识管理。零额外依赖——Agent 直接调用公开 API。
 
-### Complementary Use
+### 互补使用
 
-The three projects are not mutually exclusive. Strongest combo:
+三个项目并非互斥。最强组合：
 
 ```
-paper-distill-mcp (replace paper-scout for search frontend)
-  → 4-dim weighted scoring + code-level dedup + dual AI review
+paper-distill-mcp（替换 paper-scout 作为搜索前端）
+  → 4 维加权评分 + 代码级去重 + 双 AI 审稿
 
-TrendR analyzer + writer + vault (keep as backend)
-  → Structured notes + review writing + Obsidian persistence
+TrendR analyzer + writer + vault（保留作为后端）
+  → 结构化笔记 + 综述撰写 + Obsidian 持久化
 ```
 
-TrendR is already compatible — Phase 1 can be replaced by anything that produces `candidates.csv`.
+TrendR 已天然兼容——阶段 1 可被任何能产出 `candidates.csv` 的方案替换。
 
 ---
 
-## Cost Analysis
+## 成本分析
 
-Using MiniMax M2.5 ($0.30/1M input, $1.20/1M output):
+使用 MiniMax M2.5（$0.30/1M 输入，$1.20/1M 输出）：
 
-| Phase | Tokens | Cost |
-|-------|--------|------|
-| Phase 1: Search | ~100K | ~$0.15 |
-| Phase 2: Deep-read 20 papers | ~400K | ~$0.60 |
-| Phase 3: Gap check | ~50K | ~$0.08 |
-| Phase 4: Write review | ~200K | ~$0.30 |
-| Phase 5: Persist | ~30K | ~$0.05 |
-| **Total** | **~780K** | **~$1.18** |
+| 阶段 | Token 数 | 成本 |
+|------|----------|------|
+| 阶段 1: 搜索 | 约 100K | 约 $0.15 |
+| 阶段 2: 精读 20 篇 | 约 400K | 约 $0.60 |
+| 阶段 3: 缺口检查 | 约 50K | 约 $0.08 |
+| 阶段 4: 撰写综述 | 约 200K | 约 $0.30 |
+| 阶段 5: 持久化 | 约 30K | 约 $0.05 |
+| **合计** | **约 780K** | **约 $1.18** |
 
-With MiniMax Portal (free OAuth tier): **$0**.
+使用 MiniMax Portal（免费 OAuth 额度）：**$0**。
 
-| Approach | Per Run | Monthly (4x) |
-|----------|---------|-------------|
-| TrendR + MiniMax free | $0 | $0 |
-| TrendR + MiniMax API | ~$1.2 | ~$5 |
-| paper-distill + Claude | ~$3-5 | ~$15-20 |
-| Manual (@ $30/hr) | ~$240 | ~$960 |
-
----
-
-## Customization
-
-**Add search sources**: Edit `skills/paper-scout/SKILL.md`, add new `web_fetch` calls following existing format.
-
-**Modify review template**: Edit `skills/review-writer/SKILL.md`.
-
-**Modify note fields**: Edit `skills/paper-analyzer/SKILL.md`.
-
-**Switch models**: TrendR is model-agnostic. Configure in `openclaw.json` — MiniMax, Claude, GPT, DeepSeek, anything.
-
-**Daily paper tracking**: Tell your agent: "Set up daily arXiv cs.AI check at 9am".
+| 方案 | 单次 | 月度（4 次） |
+|------|------|-------------|
+| TrendR + MiniMax 免费 | $0 | $0 |
+| TrendR + MiniMax API | 约 $1.2 | 约 $5 |
+| paper-distill + Claude | 约 $3-5 | 约 $15-20 |
+| 人工（按 $30/hr） | 约 $240 | 约 $960 |
 
 ---
 
-## Known Limitations
+## 自定义
 
-- **Not real-time**: Academic APIs have rate limits (arXiv: 3s/request); full search takes minutes
-- **Non-frontier models may forget**: MiniMax M2.5 sometimes skips Skill files despite 3-layer defense
-- **Limited full-text reading**: Most papers analyzed via abstract pages; full PDF parsing depends on download + parse capability
-- **No Zotero integration**: Extensible (reference paper-distill-mcp's implementation)
-- **No dual AI review**: Extensible (reference paper-distill-mcp's dual review mode)
+**添加搜索源**：编辑 `skills/paper-scout/SKILL.md`，按现有格式添加新的 `web_fetch` 调用。
+
+**修改综述模板**：编辑 `skills/review-writer/SKILL.md`。
+
+**修改笔记字段**：编辑 `skills/paper-analyzer/SKILL.md`。
+
+**切换模型**：TrendR 与模型无关。在 `openclaw.json` 中配置——MiniMax、Claude、GPT、DeepSeek 均可。
+
+**每日论文追踪**：告诉你的 Agent："设置每天早上 9 点的 arXiv cs.AI 追踪"。
 
 ---
 
-## Uninstall
+## 已知局限
+
+- **非实时**：学术 API 有速率限制（arXiv: 3 秒/请求）；完整搜索需要几分钟
+- **非前沿模型可能遗忘**：MiniMax M2.5 有时会跳过 Skill 文件，尽管有三层防御
+- **全文阅读受限**：大多数论文通过摘要页分析；完整 PDF 解析取决于下载 + 解析能力
+- **无 Zotero 集成**：可扩展（参考 paper-distill-mcp 的实现）
+- **无双 AI 审稿**：可扩展（参考 paper-distill-mcp 的双审模式）
+
+---
+
+## 卸载
 
 ```bash
 chmod +x uninstall.sh
 ./uninstall.sh
 ```
 
-Your Obsidian research data and `~/research/` are preserved.
+你的 Obsidian 研究数据和 `~/research/` 会被保留。
 
 ---
 
-## Credits
+## 致谢
 
-- [karpathy/autoresearch](https://github.com/karpathy/autoresearch) — Autonomous research loop inspiration
-- [paper-distill-mcp](https://github.com/Eclipse-Cj/paper-distill-mcp) — Multi-source search architecture reference
-- [OpenClaw](https://openclaw.ai) — Agent runtime infrastructure
+- [karpathy/autoresearch](https://github.com/karpathy/autoresearch) — 自主研究循环的灵感来源
+- [paper-distill-mcp](https://github.com/Eclipse-Cj/paper-distill-mcp) — 多源搜索架构参考
+- [OpenClaw](https://openclaw.ai) — Agent 运行时基础设施
 
-## License
+## 许可证
 
 MIT
