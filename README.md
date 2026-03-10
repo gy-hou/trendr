@@ -29,6 +29,10 @@ TrendR:
 
 ---
 
+
+<img width="2752" height="1536" alt="Gemini_Generated_Image_72p26b72p26b72p2" src="https://github.com/user-attachments/assets/4cd94b4a-6ca1-4515-8a0c-835d551994d2" />
+
+
 ## 它解决什么问题
 
 | 步骤 | 手动 | TrendR |
