@@ -7,7 +7,7 @@
 
 set -e
 
-VERSION="1.0.0"
+VERSION="1.0.1"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 # ---- 颜色 ----
@@ -73,25 +73,32 @@ if [ ! -d "$WORKSPACE" ]; then
 fi
 echo -e "  ${GREEN}✅${NC} Workspace: $WORKSPACE"
 
-# Obsidian Vault 路径
+# Obsidian Vault 路径 — 优先读 obsidian-cli 默认配置
+if command -v obsidian-cli >/dev/null 2>&1; then
+    DEFAULT_VAULT=$(obsidian-cli print-default 2>/dev/null | grep -i "path" | awk -F: '{print $2}' | xargs 2>/dev/null)
+fi
+
 if [ -n "$OBSIDIAN_VAULT" ]; then
     VAULT="$OBSIDIAN_VAULT"
+elif [ -n "$DEFAULT_VAULT" ] && [ -d "$DEFAULT_VAULT" ]; then
+    VAULT="$DEFAULT_VAULT"
+    echo -e "  ${GREEN}✅${NC} 从 obsidian-cli 检测到默认 vault"
+elif [ -d "$HOME/Documents/OpenClaw-Vault" ]; then
+    VAULT="$HOME/Documents/OpenClaw-Vault"
 elif [ -d "$HOME/Documents/ObsidianVault" ]; then
     VAULT="$HOME/Documents/ObsidianVault"
-elif [ -d "$HOME/ObsidianVault" ]; then
-    VAULT="$HOME/ObsidianVault"
 else
     echo ""
     echo -e "${YELLOW}未检测到 Obsidian Vault，请输入路径:${NC}"
-    echo -e "  (直接回车使用默认: ~/Documents/ObsidianVault)"
+    echo -e "  (直接回车使用默认: ~/Documents/OpenClaw-Vault)"
     read -r VAULT_INPUT
-    VAULT="${VAULT_INPUT:-$HOME/Documents/ObsidianVault}"
+    VAULT="${VAULT_INPUT:-$HOME/Documents/OpenClaw-Vault}"
 fi
 echo -e "  ${GREEN}✅${NC} Vault: $VAULT"
 echo ""
 
 # ============================================================
-# Step 1: 安装依赖 Skills (via ClawHub)
+# Step 1: 安装依赖 Skills + 二进制工具
 # ============================================================
 echo -e "${BLUE}[1/8] 安装依赖 Skills...${NC}"
 
@@ -115,6 +122,20 @@ for skill in "${SKILLS_TO_INSTALL[@]}"; do
             echo -e "  ${YELLOW}⚠️  $skill 安装失败，可稍后手动: npx clawhub@latest install $skill${NC}"
     fi
 done
+
+# obsidian-cli（research-vault skill 依赖此二进制）
+echo ""
+echo -e "  ${BLUE}── 二进制依赖 ──${NC}"
+if command -v obsidian-cli >/dev/null 2>&1; then
+    echo -e "  ${GREEN}✅${NC} obsidian-cli (已安装: $(which obsidian-cli))"
+else
+    echo -e "  ${CYAN}📦${NC} 安装 obsidian-cli..."
+    brew tap yakitrak/yakitrak 2>/dev/null && \
+    brew install obsidian-cli 2>/dev/null && \
+        echo -e "  ${GREEN}✅${NC} obsidian-cli" || \
+        echo -e "  ${YELLOW}⚠️  obsidian-cli 安装失败，手动运行:${NC}"
+        echo -e "  ${YELLOW}   brew tap yakitrak/yakitrak && brew install obsidian-cli${NC}"
+fi
 echo ""
 
 # ============================================================
@@ -182,8 +203,8 @@ VEOF
 echo -e "  ${GREEN}✅${NC} 路径已保存到 .trendr-config"
 
 # 将 vault 路径注入 research-vault SKILL.md
-sed -i '' "s|\~/Documents/ObsidianVault|${VAULT}|g" "$WORKSPACE/skills/research-vault/SKILL.md" 2>/dev/null || \
-sed -i "s|\~/Documents/ObsidianVault|${VAULT}|g" "$WORKSPACE/skills/research-vault/SKILL.md" 2>/dev/null || true
+sed -i '' "s|\~/Documents/OpenClaw-Vault|${VAULT}|g" "$WORKSPACE/skills/research-vault/SKILL.md" 2>/dev/null || \
+sed -i "s|\~/Documents/OpenClaw-Vault|${VAULT}|g" "$WORKSPACE/skills/research-vault/SKILL.md" 2>/dev/null || true
 echo -e "  ${GREEN}✅${NC} Vault 路径已注入 research-vault skill"
 echo ""
 
@@ -266,6 +287,17 @@ TEOF
 
 echo -e "  ${GREEN}✅${NC} Obsidian 模板已创建"
 
+# 测试 Obsidian 写入
+if command -v obsidian-cli >/dev/null 2>&1; then
+    VAULT_NAME=$(basename "$VAULT")
+    obsidian-cli create "trendr-install-test" --vault "$VAULT_NAME" --content "# TrendR Install Test $(date)" 2>/dev/null && \
+        echo -e "  ${GREEN}✅${NC} Obsidian 写入测试通过" && \
+        rm -f "$VAULT/trendr-install-test.md" 2>/dev/null || \
+        echo -e "  ${YELLOW}⚠️  Obsidian 写入测试失败，请确认: obsidian-cli set-default --vault $VAULT_NAME${NC}"
+else
+    echo -e "  ${YELLOW}⚠️  obsidian-cli 未安装，跳过写入测试${NC}"
+fi
+
 # 同步已有研究数据
 if [ -d "$HOME/research" ]; then
     SYNCED=0
@@ -293,7 +325,7 @@ echo -e "${BLUE}[7/8] 更新 AGENTS.md...${NC}"
 if grep -q "TrendR" "$WORKSPACE/AGENTS.md" 2>/dev/null; then
     echo -e "  ${YELLOW}⚠️${NC}  AGENTS.md 已包含 TrendR 模块，跳过"
 else
-    cat >> "$WORKSPACE/AGENTS.md" << 'AGENTSEOF'
+    cat >> "$WORKSPACE/AGENTS.md" << AGENTSEOF
 
 
 ---
@@ -309,38 +341,38 @@ else
 ### 工作流
 
 **Phase 1 — 论文搜索**
-```
+\`\`\`
 exec: mkdir -p ~/research/[PROJECT]/{papers,notes}
-```
+\`\`\`
 然后 sessions_spawn → paper-scout：
-```
+\`\`\`
 sessions_spawn: {
   task: "先读 skills/paper-scout/SKILL.md，然后搜索以下主题，根据领域选 3-5 个最相关的源：\n[queries]\n项目路径: ~/research/[PROJECT]/",
   agentId: "paper-scout",
   mode: "run",
   runTimeoutSeconds: 300
 }
-```
+\`\`\`
 
 **Phase 2 — 论文精读**
 读 candidates.csv，选 relevance_score >= 4，sessions_spawn → paper-analyzer：
-```
+\`\`\`
 sessions_spawn: {
   task: "先读 skills/paper-analyzer/SKILL.md，分析以下论文：\n[paper_ids]\n项目路径: ~/research/[PROJECT]/",
   agentId: "paper-analyzer",
   mode: "run",
   runTimeoutSeconds: 600
 }
-```
+\`\`\`
 
 **Phase 3 — 空白检测**
 读 notes + matrix.csv → 有空白回 Phase 1 → 充分进 Phase 4
 
 **Phase 4 — 撰写综述**
-先读 `skills/review-writer/SKILL.md`，自己写 review.md + references.bib
+先读 \`skills/review-writer/SKILL.md\`，自己写 review.md + references.bib
 
 **Phase 5 — 持久化到 Obsidian（自动执行）**
-先读 `skills/research-vault/SKILL.md`，然后：
+先读 \`skills/research-vault/SKILL.md\`，然后：
 1. 同步 candidates.csv → Obsidian 论文池（去重）
 2. 转换 notes → Obsidian 论文卡片（带 wiki-link）
 3. 归档 review.md + refs.bib → Obsidian reviews/
@@ -351,14 +383,20 @@ sessions_spawn: {
 通知用户完成，附关键发现摘要。
 
 ### 输出位置
-```
+\`\`\`
 ~/research/[PROJECT]/           ← 临时（用完可清理）
 Obsidian/Research/              ← 永久知识库
   _index/paper-pool.csv         ← 论文池（累积）
   papers/[id].md                ← 论文卡片
   reviews/[project]/            ← 综述归档
   daily/[date].md               ← 日志
-```
+\`\`\`
+
+### ⚠️ Vault 配置
+首次使用前确认 obsidian-cli 已设置默认 vault：
+  obsidian-cli set-default --vault $(basename "$VAULT")
+  obsidian-cli print-default
+默认写入 $(basename "$VAULT")。用户说"写到个人 vault"时才写其他 vault。
 
 ### ⚠️ 防遗忘规则
 派发 subagent 时，任务描述中**必须**包含 "先读 skills/xxx/SKILL.md"。
@@ -366,40 +404,81 @@ Obsidian/Research/              ← 永久知识库
 
 ### 论文检索
 用户说"查论文"/"找之前的论文"/"论文池"时：
-```bash
-exec: grep -i "[关键词]" "[VAULT_PATH]/Research/_index/paper-pool.csv"
-```
+\`\`\`bash
+exec: grep -i "[关键词]" "${VAULT}/Research/_index/paper-pool.csv"
+\`\`\`
 有详细分析的论文引导用户到 Obsidian 查看。
 
 AGENTSEOF
-    # 注入 vault 路径
-    sed -i '' "s|\[VAULT_PATH\]|${VAULT}|g" "$WORKSPACE/AGENTS.md" 2>/dev/null || \
-    sed -i "s|\[VAULT_PATH\]|${VAULT}|g" "$WORKSPACE/AGENTS.md" 2>/dev/null || true
     echo -e "  ${GREEN}✅${NC} AGENTS.md 已追加 TrendR 工作流"
 fi
 echo ""
 
 # ============================================================
-# Step 8: 更新 openclaw.json skills entries
+# Step 8: 验证所有 Skills 和依赖状态
 # ============================================================
-echo -e "${BLUE}[8/8] 提示配置更新...${NC}"
+echo -e "${BLUE}[8/8] 验证 Skills 和依赖状态...${NC}"
+echo ""
 
-echo -e "  ${YELLOW}📝${NC} 请确认 ~/.openclaw/openclaw.json 中 skills.entries 包含以下条目："
+DEP_FAIL=0
+
+# ---- 7 个依赖 skill ----
+echo -e "  ${BLUE}── 7 个依赖 Skills ──${NC}"
+DEP_SKILLS=("arxiv-watcher" "tavily-search" "summarize" "deepresearchwork" "playwright-mcp" "agent-browser" "obsidian")
+for skill in "${DEP_SKILLS[@]}"; do
+    if [ -d "$WORKSPACE/skills/$skill" ] || [ -d "$HOME/.openclaw/skills/$skill" ]; then
+        echo -e "  ${GREEN}✅${NC} $skill"
+    else
+        echo -e "  ${RED}❌${NC} $skill — 未安装"
+        echo -e "     ${YELLOW}运行: npx clawhub@latest install $skill${NC}"
+        DEP_FAIL=$((DEP_FAIL + 1))
+    fi
+done
+
 echo ""
-echo '    "paper-scout":     { "enabled": true }'
-echo '    "paper-analyzer":  { "enabled": true }'
-echo '    "review-writer":   { "enabled": true }'
-echo '    "research-vault":  { "enabled": true }'
-echo '    "arxiv-watcher":   { "enabled": true }'
-echo '    "tavily-search":   { "enabled": true }'
-echo '    "summarize":       { "enabled": true }'
-echo '    "deepresearchwork":{ "enabled": true }'
-echo '    "playwright-mcp":  { "enabled": true }'
-echo '    "agent-browser":   { "enabled": true }'
-echo '    "obsidian":        { "enabled": true }'
+
+# ---- 4 个 TrendR skill ----
+echo -e "  ${BLUE}── 4 个 TrendR Skills ──${NC}"
+TRENDR_SKILLS=("paper-scout" "paper-analyzer" "review-writer" "research-vault")
+for skill in "${TRENDR_SKILLS[@]}"; do
+    if [ -d "$WORKSPACE/skills/$skill" ]; then
+        echo -e "  ${GREEN}✅${NC} $skill (TrendR)"
+    else
+        echo -e "  ${RED}❌${NC} $skill — 缺失 (TrendR 安装异常)"
+        DEP_FAIL=$((DEP_FAIL + 1))
+    fi
+done
+
 echo ""
-echo -e "  ${YELLOW}📝${NC} 确认 agents.list 中已注册 paper-scout, paper-analyzer, review-lead"
-echo -e "  ${YELLOW}📝${NC} 确认 maxTokens >= 32768（否则 analyzer 会截断）"
+
+# ---- 二进制依赖（决定 skill eligible/blocked）----
+echo -e "  ${BLUE}── 二进制依赖（影响 eligible/blocked 状态）──${NC}"
+
+if command -v obsidian-cli >/dev/null 2>&1; then
+    echo -e "  ${GREEN}✅${NC} obsidian-cli → research-vault skill = eligible"
+else
+    echo -e "  ${RED}❌${NC} obsidian-cli → research-vault skill = ${RED}blocked${NC}"
+    echo -e "     ${YELLOW}运行: brew tap yakitrak/yakitrak && brew install obsidian-cli${NC}"
+    DEP_FAIL=$((DEP_FAIL + 1))
+fi
+
+if command -v playwright-mcp >/dev/null 2>&1; then
+    echo -e "  ${GREEN}✅${NC} playwright-mcp → playwright-mcp skill = eligible"
+else
+    echo -e "  ${RED}❌${NC} playwright-mcp → playwright-mcp skill = ${RED}blocked${NC}"
+    echo -e "     ${YELLOW}运行: npm install -g @playwright/mcp${NC}"
+    DEP_FAIL=$((DEP_FAIL + 1))
+fi
+
+echo ""
+
+# ---- 结果汇总 ----
+if [ "$DEP_FAIL" -gt 0 ]; then
+    echo -e "  ${YELLOW}⚠️  有 $DEP_FAIL 项需要手动处理（见上方 ❌ 标记）${NC}"
+    echo -e "  ${YELLOW}   处理完后运行: openclaw gateway restart${NC}"
+else
+    echo -e "  ${GREEN}✅ 全部 11 个 Skills 就绪，2 个二进制依赖已安装！${NC}"
+fi
 echo ""
 
 # ============================================================
@@ -408,7 +487,7 @@ echo ""
 POOL_COUNT=$(tail -n +2 "$POOL" 2>/dev/null | wc -l | tr -d ' ')
 
 echo -e "${CYAN}╔══════════════════════════════════════════════╗${NC}"
-echo -e "${CYAN}║          TrendR 安装完成！                    ║${NC}"
+echo -e "${CYAN}║          TrendR v${VERSION} 安装完成！              ║${NC}"
 echo -e "${CYAN}╚══════════════════════════════════════════════╝${NC}"
 echo ""
 echo -e "  ${GREEN}Agents${NC}:   paper-scout, paper-analyzer, review-lead"
@@ -417,9 +496,11 @@ echo -e "  ${GREEN}Vault${NC}:    $VAULT/Research/"
 echo -e "  ${GREEN}论文池${NC}:   $POOL_COUNT 篇"
 echo ""
 echo -e "  ${BLUE}下一步:${NC}"
-echo "  1. 检查 openclaw.json 配置（见上方提示）"
-echo "  2. openclaw gateway restart"
-echo "  3. 对你的 Agent 说: '帮我调研 XXX 方向的最新进展'"
+echo "  1. 确认 obsidian-cli 默认 vault:"
+echo "     obsidian-cli set-default --vault $(basename "$VAULT")"
+echo "  2. 确认 openclaw.json 中 agents.list 和 skills.entries 已配置"
+echo "  3. openclaw gateway restart"
+echo "  4. 对你的 Agent 说: '帮我调研 XXX 方向的最新进展'"
 echo ""
 echo -e "  ${BLUE}卸载:${NC}"
 echo "  chmod +x $(dirname "$0")/uninstall.sh && $(dirname "$0")/uninstall.sh"
