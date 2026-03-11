@@ -25,7 +25,7 @@ TrendR:
   → 通知你：完成 ✅
 ```
 
-灵感来源于 [karpathy/autoresearch](https://github.com/karpathy/autoresearch) 的自主研究循环，从「LLM 训练优化」重新设计为「论文搜索 + 文献综述」，从 NVIDIA H100 到 Mac Apple Silicon，从 GPU 账单到约 ¥7/次。
+灵感来源于 [karpathy/autoresearch](https://github.com/karpathy/autoresearch) 的自主研究循环，从「LLM 训练优化」重新设计为「论文搜索 + 文献综述」。
 
 ---
 
@@ -64,7 +64,7 @@ TrendR:
 ## 前置要求
 
 - macOS 或 Linux
-- Node.js 18+
+- Node.js 22+
 - 已安装 [OpenClaw](https://openclaw.ai) 并完成 `openclaw onboard`
 - 已安装 [Obsidian](https://obsidian.md)
 - OpenClaw 支持的任意 LLM（MiniMax M2.5 / Claude / GPT 等）
@@ -99,6 +99,25 @@ OBSIDIAN_VAULT="/your/vault/path" ./install.sh
 | 6 | 初始化 Obsidian `Research/` 目录 + 论文池 + 模板，同步已有数据 |
 | 7 | 将 TrendR 工作流追加到 AGENTS.md（含强制 Obsidian 自动保存） |
 | 8 | 提示用户验证 `openclaw.json` 配置 |
+
+### 本地obsidian 开启cli 
+
+1.打开obsidian, 设置》〉通用〉》Command line interface〉》开启
+2. Terminal输入
+```shell
+obsidian-cli set-default --vault OpenClaw-Vault
+obsidian-cli print-default
+```
+应该显示 OpenClaw-Vault 和路径 /Users/mac/Documents/OpenClaw-Vault。
+测试写入：
+```shell
+obsidian-cli create "test-note" --vault OpenClaw-Vault --content "# Hello from CLI"
+```
+
+### 检查openclaw UI skills 是eligible
+通过本地 UI界面检查所有skills状态，哪个有问题，让AI 一个一个调试：
+<img width="902" height="829" alt="Screenshot 2026-03-11 at 12 14 17" src="https://github.com/user-attachments/assets/4ff121ee-5b36-4ef6-89e1-5a1271026d17" />
+
 
 ### 安装后：验证 openclaw.json
 
