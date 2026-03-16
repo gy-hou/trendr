@@ -29,9 +29,27 @@ TrendR:
 
 ---
 
+<p align="center">
+  <img src="assets/architecture-full.png" width="860" alt="TrendR Architecture (Full Version)" />
+</p>
 
-<img width="2752" height="1536" alt="Gemini_Generated_Image_72p26b72p26b72p2" src="https://github.com/user-attachments/assets/4cd94b4a-6ca1-4515-8a0c-835d551994d2" />
+---
 
+## 实测演示
+
+> 主题：「调研 agentic RAG 2025 最新进展」
+
+<p align="center">
+  <img src="assets/demo-phase1-fetch.png" width="420" alt="Phase 1-2: 搜索 + 精读进行中" />
+  &nbsp;&nbsp;
+  <img src="assets/demo-result.png" width="420" alt="调研报告输出结果" />
+</p>
+
+<p align="center">
+  <sub>左：Phase 1-2 并行抓取 arXiv 论文中 · 右：最终调研报告输出（14.7KB，含核心发现表）</sub>
+</p>
+
+---
 
 ## 它解决什么问题
 
