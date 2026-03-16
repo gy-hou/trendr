@@ -34,6 +34,103 @@ metadata: {"openclaw": {}}
 
 每个源之间等待 2-3 秒避免速率限制。
 
+## 深挖模式（Scrapling）
+
+当任务包含以下任一关键词时，必须开启深挖模式：
+- `深入爬取`
+- `深挖`
+- `深度研究`
+- `deep crawl`
+
+### 深挖模式强制步骤
+
+1. 先完成常规 3-5 源 API 搜索和去重，生成 `candidates.csv`
+2. 从 `candidates.csv` 中选 `relevance_score >= 4` 的前 10 篇（不足则全选）
+3. 对每篇构造落地页 URL，优先级：
+   - `source=arxiv` 且 `paper_id` 为 arXiv ID → `https://arxiv.org/abs/[paper_id]`
+   - `paper_id` 是 DOI（`10.` 开头） → `https://doi.org/[paper_id]`
+   - 其他 → 用标题构造 Semantic Scholar 搜索 URL
+4. 用 Scrapling 抓取页面正文片段，输出：
+   - `~/research/[PROJECT]/scrapling_extracts.jsonl`
+   - `~/research/[PROJECT]/crawl_log.md`
+
+### Scrapling 执行模板（直接可用）
+
+```bash
+exec: PROJECT="[PROJECT]" /Library/Developer/CommandLineTools/usr/bin/python3 - <<'PY'
+import csv, json, os, pathlib, urllib.parse
+from scrapling import Fetcher
+
+project = os.environ["PROJECT"]
+base = pathlib.Path.home() / "research" / project
+candidates = base / "candidates.csv"
+out_jsonl = base / "scrapling_extracts.jsonl"
+out_log = base / "crawl_log.md"
+
+rows = []
+with candidates.open("r", encoding="utf-8", newline="") as f:
+    reader = csv.DictReader(f)
+    for r in reader:
+        try:
+            score = float(r.get("relevance_score", "0") or 0)
+        except Exception:
+            score = 0
+        if score >= 4:
+            rows.append(r)
+
+rows = rows[:10]
+fetcher = Fetcher(auto_match=False)
+ok, fail = 0, 0
+
+def build_url(row):
+    pid = (row.get("paper_id") or "").strip()
+    src = (row.get("source") or "").strip().lower()
+    title = (row.get("title") or "").strip()
+    if src == "arxiv" and pid:
+        return f"https://arxiv.org/abs/{pid}"
+    if pid.startswith("10."):
+        return f"https://doi.org/{pid}"
+    q = urllib.parse.quote(title[:180])
+    return f"https://www.semanticscholar.org/search?q={q}"
+
+with out_jsonl.open("w", encoding="utf-8") as out:
+    for row in rows:
+        pid = (row.get("paper_id") or "").strip()
+        url = build_url(row)
+        item = {"paper_id": pid, "url": url, "status": "failed", "title": None, "snippet": None}
+        try:
+            page = fetcher.get(url, timeout=30)
+            txt = (page.get_all_text() or "").strip()
+            title_node = page.css_first("title")
+            item["status"] = "ok" if page.status and int(page.status) < 400 else f"http_{page.status}"
+            item["title"] = title_node.text.strip() if title_node else None
+            item["snippet"] = txt[:1200]
+            if item["status"] == "ok":
+                ok += 1
+            else:
+                fail += 1
+        except Exception as e:
+            item["status"] = f"error:{type(e).__name__}"
+            fail += 1
+        out.write(json.dumps(item, ensure_ascii=False) + "\\n")
+
+out_log.write_text(
+    "# Scrapling Crawl Log\\n"
+    f"- project: {project}\\n"
+    f"- selected_papers: {len(rows)}\\n"
+    f"- success: {ok}\\n"
+    f"- failed: {fail}\\n",
+    encoding="utf-8",
+)
+print(f"saved: {out_jsonl}")
+print(f"saved: {out_log}")
+PY
+```
+
+注意：
+- 上述模板走本地 Python + Scrapling，不依赖 `scrapling mcp` 子命令
+- 深挖模式不是替代 API 搜索，而是作为证据增强层
+
 ---
 
 ## 各源搜索命令
@@ -244,6 +341,17 @@ Date: [YYYY-MM-DD]
 - Score >= 3: Z (saved to candidates.csv)
 - Score >= 4: W (recommended for deep analysis)
 ```
+
+### 深挖模式附加输出（开启时必须有）
+
+```
+write: ~/research/[PROJECT]/crawl_log.md
+write: ~/research/[PROJECT]/scrapling_extracts.jsonl
+```
+
+- `crawl_log.md`：记录抓取尝试数、成功数、失败数
+- `scrapling_extracts.jsonl`：每行一个 JSON，至少包含 `paper_id/url/status/snippet`
+- 在 `search_log.md` 末尾追加 `Scrapling Deep Crawl Summary` 小节
 
 ---
 
