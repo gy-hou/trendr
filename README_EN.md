@@ -12,12 +12,12 @@
 Tell your Agent one sentence. It does the rest.
 
 ```
-You: "Survey the latest advances in multi-agent systems for finance"
+You: "Survey the latest advances in agentic RAG 2025"
 
 TrendR:
-  → 9-source parallel search, 47 candidate papers found
-  → Deep-read 12 papers, structured notes + comparison matrix
-  → 21KB literature review (taxonomy, gap analysis, BibTeX)
+  → 9-source parallel search, 81 candidate papers found
+  → Deep-read 11 papers, structured notes + comparison matrix
+  → 14KB literature review (taxonomy, gap analysis, BibTeX)
   → Auto-archived to Obsidian, paper pool persisted
   → Notifies you: done ✅
 ```
