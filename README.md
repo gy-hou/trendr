@@ -1,7 +1,7 @@
 <p align="center">
   <h1 align="center">TrendR</h1>
   <p align="center"><strong>趋势研究 — 自动化文献综述 + Obsidian 知识管理</strong></p>
-  <p align="center">3 个 Agent · 4 个 Skill · 9 源搜索 · 零额外 MCP 依赖</p>
+  <p align="center">3 个 Agent · 4 个 Skill · 9 源搜索 · Basic / Full 两档安装</p>
   <p align="center">
     <a href="#安装">安装</a> · <a href="#使用方法">使用</a> · <a href="#系统架构">架构</a> · <a href="#横向对比">对比</a>
   </p>
@@ -49,56 +49,71 @@ TrendR:
 
 ## 包含内容
 
+**核心（Basic + Full 均包含）**
+
 | 类型 | 名称 | 职责 |
 |------|------|------|
 | Agent | `paper-scout` | 9 源搜索 + 评分 + 去重 |
 | Agent | `paper-analyzer` | 精读 + 结构化笔记 + 对比矩阵 |
-| Agent | `review-lead` | 编排流水线 + 撰写综述 + Obsidian 持久化 |
+| Agent | `review-lead` | 编排流水线 + 撰写综述 |
 | Skill | `paper-scout` | 9 个学术 API 调用手册（10KB） |
 | Skill | `paper-analyzer` | 结构化提取模板 |
 | Skill | `review-writer` | 综述写作模板 + 质量清单 |
 | Skill | `research-vault` | Obsidian 持久化 + 论文池索引 |
 
+**增强层（Full 模式专属）**
+
+| 组件 | 功能 | 关掉后效果 |
+|------|------|-----------|
+| Scrapling | 深挖模式：抓取 JS 渲染页面 | 仅用静态 API，覆盖率略低 |
+| Zotero | 文献库同步，自动导入 DOI | BibTeX 仍可本地生成 |
+| Obsidian + obsidian-cli | 论文卡片 + 综述归档 + 每日日志 | 结果存 `~/research/`，不进 Obsidian |
+| Nano-pdf | 全文 PDF 精读 | 只读摘要/元数据 |
+| Context7 | 给 codex-coder 提供精确库文档 | coding 任务退回 web search |
+
+**回退层（两种模式均不默认启用）**
+
+| 组件 | 触发条件 |
+|------|---------|
+| Playwright | 仅在 JS 渲染缺内容 / 登录态 / 用户明确要求时启用，不进默认检索链 |
+
 ---
 
 ## 前置要求
 
+**Basic 模式（最低要求）**
 - macOS 或 Linux
-- Node.js 22+
-- 已安装 [OpenClaw](https://openclaw.ai) 并完成 `openclaw onboard`
-- 已安装 [Obsidian](https://obsidian.md)
+- Node.js 18+
+- [OpenClaw](https://openclaw.ai) 已安装并完成 `openclaw onboard`
 - OpenClaw 支持的任意 LLM（MiniMax M2.5 / Claude / GPT 等）
+
+**Full 模式（额外依赖）**
+- [Obsidian](https://obsidian.md) App + obsidian-cli（`brew install obsidian-cli`）
+- Python 3 + `pip install scrapling`
+- Zotero App + [API Key](https://www.zotero.org/settings/keys)
+- （可选）Playwright：`npm install -g @playwright/mcp`
 
 ---
 
 ## 安装
 
 ```bash
-git clone https://github.com/yourname/trendr.git
+git clone https://github.com/gy-hou/trendr.git
 cd trendr
 chmod +x install.sh
 ./install.sh
 ```
 
-自定义 Obsidian 仓库路径：
+安装器会先展示所有组件说明和 Basic / Full 对比表，再让你选择安装模式，确认后才开始安装。
+
+**选择 Basic：** 核心链路立刻可用，无额外工具依赖。
+**选择 Full：** 自动安装 Scrapling、Obsidian CLI、Nano-pdf、Context7，并引导配置 Zotero。
+
+自定义 Obsidian vault 路径（Full 模式）：
 
 ```bash
 OBSIDIAN_VAULT="/your/vault/path" ./install.sh
 ```
-
-### 安装器做了什么（8 步）
-
-| 步骤 | 动作 |
-|------|------|
-| 0 | 检测环境：Node.js、npx、OpenClaw、workspace、Obsidian vault |
-| 1 | 通过 ClawHub 安装 7 个依赖 Skill（arxiv-watcher、tavily-search、summarize、deep-research、playwright-mcp、agent-browser、obsidian） |
-| 2 | 安装 Playwright 浏览器（chromium） |
-| 3 | 复制 3 个 Agent → `workspace/agents/` |
-| 4 | 复制 4 个 Skill → `workspace/skills/` |
-| 5 | 检测 Obsidian vault 路径，注入到 Skill 配置中 |
-| 6 | 初始化 Obsidian `Research/` 目录 + 论文池 + 模板，同步已有数据 |
-| 7 | 将 TrendR 工作流追加到 AGENTS.md（含强制 Obsidian 自动保存） |
-| 8 | 提示用户验证 `openclaw.json` 配置 |
 
 ### 本地obsidian 开启cli 
 
@@ -121,39 +136,17 @@ obsidian-cli create "test-note" --vault OpenClaw-Vault --content "# Hello from C
 
 ### 安装后：验证 openclaw.json
 
-确保 `~/.openclaw/openclaw.json` 包含以下内容：
+安装器会自动注册 Agents 和 Skills，但请确认 `~/.openclaw/openclaw.json` 包含：
 
-**1. agents.list** — 注册三个子 Agent：
-
-```json
-{
-  "agents": {
-    "list": [
-      {
-        "id": "main",
-        "default": true,
-        "subagents": {
-          "allowAgents": ["paper-scout", "paper-analyzer", "review-lead"]
-        }
-      },
-      { "id": "paper-scout",    "name": "Paper Scout",    "workspace": "~/.openclaw/workspace" },
-      { "id": "paper-analyzer", "name": "Paper Analyzer", "workspace": "~/.openclaw/workspace" },
-      { "id": "review-lead",    "name": "Review Lead",    "workspace": "~/.openclaw/workspace" }
-    ]
-  }
-}
-```
-
-**2. skills.entries** — 启用所有相关 Skill：
+**agents.list** — 三个子 Agent：
 
 ```json
-"paper-scout": { "enabled": true },
-"paper-analyzer": { "enabled": true },
-"review-writer": { "enabled": true },
-"research-vault": { "enabled": true }
+{ "id": "paper-scout",    "name": "Paper Scout",    "workspace": "~/.openclaw/workspace" },
+{ "id": "paper-analyzer", "name": "Paper Analyzer", "workspace": "~/.openclaw/workspace" },
+{ "id": "review-lead",    "name": "Review Lead",    "workspace": "~/.openclaw/workspace" }
 ```
 
-**3. maxTokens** >= 32768（否则 analyzer 输出会被截断）
+**maxTokens** >= 32768（否则 analyzer 输出会被截断）
 
 然后：
 
@@ -328,10 +321,10 @@ TrendR        ████████     ████████     ██�
 | **对比矩阵** | N/A | ❌ | **✅ matrix.csv** |
 | **文献综述** | N/A | ❌ | **✅ 完整综述** |
 | **Obsidian** | N/A | ✅ 笔记卡片 | **✅ 卡片 + 综述 + 日志 + 论文池** |
-| **Zotero** | N/A | ✅ | ❌（可扩展） |
+| **Zotero** | N/A | ✅ | ✅（Full 模式） |
 | **双 AI 审稿** | ❌ | ✅ | ❌（可扩展） |
 | **Agent 架构** | 单 Agent | 无 Agent（纯工具） | **多 Agent（3 个子 Agent）** |
-| **额外依赖** | PyTorch + GPU | Python 包 | **无（仅 web_fetch）** |
+| **额外依赖** | PyTorch + GPU | Python 包 | **Basic: 无；Full: obsidian-cli + Python** |
 | **许可证** | MIT | AGPL-3.0 | **MIT** |
 
 ### 设计哲学
@@ -376,8 +369,8 @@ TrendR 已天然兼容——阶段 1 可被任何能产出 `candidates.csv` 的�
 
 - **非实时**：学术 API 有速率限制（arXiv: 3 秒/请求）；完整搜索需要几分钟
 - **非前沿模型可能遗忘**：MiniMax M2.5 有时会跳过 Skill 文件，尽管有三层防御
-- **全文阅读受限**：大多数论文通过摘要页分析；完整 PDF 解析取决于下载 + 解析能力
-- **无 Zotero 集成**：可扩展（参考 paper-distill-mcp 的实现）
+- **全文阅读（Basic 模式）**：仅读摘要页；Full 模式开启 Nano-pdf 可精读 PDF 全文
+- **Zotero / Obsidian（Basic 模式）**：Basic 不含持久化；Full 模式自动配置
 - **无双 AI 审稿**：可扩展（参考 paper-distill-mcp 的双审模式）
 
 ---

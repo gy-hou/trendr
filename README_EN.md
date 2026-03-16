@@ -1,7 +1,7 @@
 <p align="center">
   <h1 align="center">TrendR</h1>
   <p align="center"><strong>Trend Research — Automated Literature Review + Obsidian Knowledge Management</strong></p>
-  <p align="center">3 Agents · 4 Skills · 9-Source Search · Zero Extra MCP Dependencies</p>
+  <p align="center">3 Agents · 4 Skills · 9-Source Search · Basic / Full Install Modes</p>
   <p align="center">
     <a href="#installation">Install</a> · <a href="#usage">Usage</a> · <a href="#architecture">Architecture</a> · <a href="#comparison">Comparison</a>
   </p>
@@ -42,92 +42,85 @@ Inspired by [karpathy/autoresearch](https://github.com/karpathy/autoresearch)'s 
 
 ## What's Inside
 
+**Core (both Basic and Full)**
+
 | Type | Name | Role |
 |------|------|------|
 | Agent | `paper-scout` | 9-source search + scoring + dedup |
 | Agent | `paper-analyzer` | Deep-read + structured notes + comparison matrix |
-| Agent | `review-lead` | Orchestrate pipeline + write review + Obsidian persistence |
+| Agent | `review-lead` | Orchestrate pipeline + write review |
 | Skill | `paper-scout` | 9 academic API call handbook (10KB) |
 | Skill | `paper-analyzer` | Structured extraction templates |
 | Skill | `review-writer` | Review writing template + quality checklist |
 | Skill | `research-vault` | Obsidian persistence + paper pool index |
 
+**Enhancement Layer (Full mode only)**
+
+| Component | Function | Without it |
+|-----------|----------|-----------|
+| Scrapling | Deep-crawl: extract JS-rendered page content | Static APIs only, slightly lower coverage |
+| Zotero | Library sync, auto-import DOI | BibTeX still generated locally |
+| Obsidian + obsidian-cli | Paper cards + review archive + daily log | Results saved to `~/research/` only |
+| Nano-pdf | Full-text PDF reading | Abstract/metadata only |
+| Context7 | Precise library docs for codex-coder | Falls back to web search |
+
+**Fallback Layer (not enabled by default in either mode)**
+
+| Component | Trigger condition |
+|-----------|-----------------|
+| Playwright | Only when JS-rendered content missing / login state required / user explicitly requests live page interaction — not in default retrieval chain |
+
 ---
 
 ## Prerequisites
 
+**Basic mode (minimum)**
 - macOS or Linux
 - Node.js 18+
 - [OpenClaw](https://openclaw.ai) installed with `openclaw onboard` completed
-- [Obsidian](https://obsidian.md) installed
 - Any LLM supported by OpenClaw (MiniMax M2.5 / Claude / GPT / etc.)
+
+**Full mode (additional)**
+- [Obsidian](https://obsidian.md) App + obsidian-cli (`brew install obsidian-cli`)
+- Python 3 + `pip install scrapling`
+- Zotero App + [API Key](https://www.zotero.org/settings/keys)
+- (Optional) Playwright: `npm install -g @playwright/mcp`
 
 ---
 
 ## Installation
 
 ```bash
-git clone https://github.com/yourname/trendr.git
+git clone https://github.com/gy-hou/trendr.git
 cd trendr
 chmod +x install.sh
 ./install.sh
 ```
 
-Custom Obsidian vault path:
+The installer shows a full component manifest and Basic/Full comparison table before asking you to choose. Nothing is installed until you confirm.
+
+**Choose Basic:** Core pipeline ready immediately, no extra tool dependencies.
+**Choose Full:** Automatically installs Scrapling, Obsidian CLI, Nano-pdf, Context7, and guides Zotero setup.
+
+Custom Obsidian vault path (Full mode):
 
 ```bash
 OBSIDIAN_VAULT="/your/vault/path" ./install.sh
 ```
 
-### What the Installer Does (8 Steps)
-
-| Step | Action |
-|------|--------|
-| 0 | Detect environment: Node.js, npx, OpenClaw, workspace, Obsidian vault |
-| 1 | Install 7 dependency skills via ClawHub (arxiv-watcher, tavily-search, summarize, deep-research, playwright-mcp, agent-browser, obsidian) |
-| 2 | Install Playwright browser (chromium) |
-| 3 | Copy 3 Agents → `workspace/agents/` |
-| 4 | Copy 4 Skills → `workspace/skills/` |
-| 5 | Detect Obsidian vault path, inject into skill configs |
-| 6 | Initialize Obsidian `Research/` directory + paper pool + templates, sync existing data |
-| 7 | Append TrendR workflow to AGENTS.md (with mandatory Obsidian auto-save) |
-| 8 | Prompt user to verify `openclaw.json` config |
-
 ### Post-Install: Verify openclaw.json
 
-Ensure `~/.openclaw/openclaw.json` contains:
+The installer auto-registers agents and skills. Double-check that `~/.openclaw/openclaw.json` includes:
 
-**1. agents.list** — register the three subagents:
-
-```json
-{
-  "agents": {
-    "list": [
-      {
-        "id": "main",
-        "default": true,
-        "subagents": {
-          "allowAgents": ["paper-scout", "paper-analyzer", "review-lead"]
-        }
-      },
-      { "id": "paper-scout",    "name": "Paper Scout",    "workspace": "~/.openclaw/workspace" },
-      { "id": "paper-analyzer", "name": "Paper Analyzer", "workspace": "~/.openclaw/workspace" },
-      { "id": "review-lead",    "name": "Review Lead",    "workspace": "~/.openclaw/workspace" }
-    ]
-  }
-}
-```
-
-**2. skills.entries** — enable all relevant skills:
+**agents.list** — three subagents:
 
 ```json
-"paper-scout": { "enabled": true },
-"paper-analyzer": { "enabled": true },
-"review-writer": { "enabled": true },
-"research-vault": { "enabled": true }
+{ "id": "paper-scout",    "name": "Paper Scout",    "workspace": "~/.openclaw/workspace" },
+{ "id": "paper-analyzer", "name": "Paper Analyzer", "workspace": "~/.openclaw/workspace" },
+{ "id": "review-lead",    "name": "Review Lead",    "workspace": "~/.openclaw/workspace" }
 ```
 
-**3. maxTokens** >= 32768 for your model (otherwise analyzer output gets truncated)
+**maxTokens** >= 32768 for your model (otherwise analyzer output gets truncated)
 
 Then:
 
@@ -302,10 +295,10 @@ TrendR        ████████       ████████      █�
 | **Comparison matrix** | N/A | ❌ | **✅ matrix.csv** |
 | **Literature review** | N/A | ❌ | **✅ Full review** |
 | **Obsidian** | N/A | ✅ Note cards | **✅ Cards + reviews + logs + pool** |
-| **Zotero** | N/A | ✅ | ❌ (extensible) |
+| **Zotero** | N/A | ✅ | ✅ (Full mode) |
 | **Dual AI review** | ❌ | ✅ | ❌ (extensible) |
 | **Agent architecture** | Single agent | No agent (pure tools) | **Multi-agent (3 subagents)** |
-| **Extra dependencies** | PyTorch + GPU | Python package | **None (web_fetch only)** |
+| **Extra dependencies** | PyTorch + GPU | Python package | **Basic: none; Full: obsidian-cli + Python** |
 | **License** | MIT | AGPL-3.0 | **MIT** |
 
 ### Design Philosophy
@@ -374,8 +367,8 @@ With MiniMax Portal (free OAuth tier): **$0**.
 
 - **Not real-time**: Academic APIs have rate limits (arXiv: 3s/request); full search takes minutes
 - **Non-frontier models may forget**: MiniMax M2.5 sometimes skips Skill files despite 3-layer defense
-- **Limited full-text reading**: Most papers analyzed via abstract pages; full PDF parsing depends on download + parse capability
-- **No Zotero integration**: Extensible (reference paper-distill-mcp's implementation)
+- **Full-text reading (Basic mode)**: Abstract pages only; Full mode enables Nano-pdf for full PDF reading
+- **Zotero / Obsidian (Basic mode)**: Not included; Full mode auto-configures both
 - **No dual AI review**: Extensible (reference paper-distill-mcp's dual review mode)
 
 ---
