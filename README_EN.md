@@ -3,7 +3,7 @@
   <p align="center"><strong>Trend Research — Automated Literature Review + Obsidian Knowledge Management</strong></p>
   <p align="center">3 Agents · 4 Skills · 9-Source Search · Basic / Full Install Modes</p>
   <p align="center">
-    <a href="#installation">Install</a> · <a href="#usage">Usage</a> · <a href="#architecture">Architecture</a> · <a href="#comparison">Comparison</a>
+    <a href="#installation">Install</a> · <a href="#usage">Usage</a> · <a href="#architecture">Architecture</a>
   </p>
 </p>
 
@@ -160,59 +160,85 @@ openclaw gateway restart
 ### System Overview
 
 ```
-┌──────────────────────────────────────────────────────────┐
-│                         User                              │
-│                Telegram / Feishu / Web                     │
-└─────────────────────┬────────────────────────────────────┘
-                      ▼
-┌──────────────────────────────────────────────────────────┐
-│           OpenClaw Gateway (runs locally)                  │
-│                                                          │
-│  ┌─ main agent ───────────────────────────────────────┐  │
-│  │  Receive → Decompose → Dispatch → Synthesize       │  │
-│  └──────┬──────────────┬──────────────┬───────────────┘  │
-│         ▼              ▼              ▼                   │
-│  ┌───────────┐  ┌───────────┐  ┌───────────┐           │
-│  │  paper-   │  │  paper-   │  │  review-  │           │
-│  │  scout    │  │  analyzer │  │  lead     │           │
-│  │  Search   │  │  Read     │  │  Write    │           │
-│  │  Score    │  │  Extract  │  │  Archive  │           │
-│  └─────┬─────┘  └─────┬─────┘  └─────┬─────┘           │
-│        │              │              │                   │
-│  ┌─────▼──────────────▼──────────────▼───────────────┐  │
-│  │  Skills (Markdown instructions for tools)          │  │
-│  ├────────────────────────────────────────────────────┤  │
-│  │  Tools (exec / web_fetch / read / write / browser) │  │
-│  └────────────────────────────────────────────────────┘  │
-└─────────┬───────────────────────────────┬────────────────┘
-          ▼                               ▼
- ┌─────────────────┐          ┌──────────────────────┐
- │  9 Academic APIs │          │  Obsidian Vault       │
- │  (all free)      │          │  Pool + Cards + Reviews│
- └─────────────────┘          └──────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│                            User                                   │
+│                   Telegram / Feishu / Web / CLI                   │
+└──────────────────────────┬──────────────────────────────────────┘
+                            ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                 OpenClaw Gateway (runs locally)                    │
+│                                                                 │
+│  ┌─ main agent ──────────────────────────────────────────────┐  │
+│  │       Receive → Decompose → Dispatch → Synthesize          │  │
+│  └──────┬───────────────┬────────────────┬────────────────────┘  │
+│         ▼               ▼                ▼                       │
+│  ┌────────────┐  ┌────────────┐  ┌─────────────┐               │
+│  │paper-scout │  │paper-      │  │review-lead  │               │
+│  │Search Score│  │analyzer    │  │Orchestrate  │               │
+│  │Dedup       │  │Read Extract│  │Write Archive│               │
+│  └─────┬──────┘  └─────┬──────┘  └──────┬──────┘               │
+│        │               │                │                       │
+│  ┌─────▼───────────────▼────────────────▼──────────────────┐   │
+│  │            Skills (executable Markdown knowledge files)   │   │
+│  │  paper-scout · paper-analyzer · review-writer · vault    │   │
+│  └──────────────────────────┬──────────────────────────────┘   │
+│                             ▼                                   │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │  Tool Layer (exec / web_fetch / read / write / browser)   │   │
+│  ├──────────────────────────────────────────────────────────┤   │
+│  │  Basic:  9×Academic APIs (free, no extra deps)            │   │
+│  │  Full:   + Scrapling (JS rendering) + Nano-pdf (full PDF) │   │
+│  │          + Context7 (library docs) + Zotero (library)     │   │
+│  │  Fallback: Playwright (only when JS missing / login req'd) │   │
+│  └──────────────────────────────────────────────────────────┘   │
+└────────────┬────────────────────────────┬───────────────────────┘
+             ▼                            ▼
+  ┌─────────────────────┐     ┌────────────────────────────┐
+  │  9 Academic APIs     │     │  Obsidian Vault             │
+  │  arXiv · S2 · OA    │     │  Pool / Cards / Reviews / Log│
+  │  PubMed · DBLP ···  │     └────────────────────────────┘
+  └─────────────────────┘
 ```
 
 ### Pipeline
 
 ```
-Phase 1: Search ──→ candidates.csv (40-100 papers)
-                     search_log.md
-         │
-Phase 2: Analyze ─→ notes/*.md (10-30 structured notes)
-                     matrix.csv (comparison matrix)
-         │
-Phase 3: Gap Check → insufficient? → back to Phase 1
-                     sufficient?  → Phase 4
-         │
-Phase 4: Write ───→ review.md (15-25KB literature review)
-                     references.bib
-         │
-Phase 5: Persist ─→ Obsidian paper-pool.csv (cumulative, deduped)
-                     Obsidian papers/*.md (cards with wiki-links)
-                     Obsidian reviews/project/ (archived)
-                     Obsidian daily/date.md (research log)
-         │
-Phase 6: Report ──→ Notify user via Telegram/Feishu
+  One sentence from you
+        │
+        ▼
+┌─ Phase 1: Search ───────────────────────────────────────┐
+│  paper-scout calls 3-5 most relevant APIs in parallel    │
+│  → candidates.csv (40-100 papers, relevance score 1-5)   │
+│  → search_log.md                                        │
+└──────────────────────────────┬──────────────────────────┘
+                               ▼
+┌─ Phase 2: Deep Read ────────────────────────────────────┐
+│  paper-analyzer reads all papers with score ≥ 4          │
+│  → notes/*.md (structured: problem/method/results/limits)│
+│  → matrix.csv (multi-dimensional comparison)             │
+└──────────────────────────────┬──────────────────────────┘
+                               ▼
+┌─ Phase 3: Gap Check ────────────────────────────────────┐
+│  Coverage insufficient? ──→ back to Phase 1              │
+│  Coverage sufficient?   ──→ Phase 4                      │
+└──────────────────────────────┬──────────────────────────┘
+                               ▼
+┌─ Phase 4: Write Review ─────────────────────────────────┐
+│  review-lead generates full literature review            │
+│  → review.md (15-25KB: taxonomy / gap analysis / trends) │
+│  → references.bib                                       │
+└──────────────────────────────┬──────────────────────────┘
+                               ▼
+┌─ Phase 5: Persist ──────────────────────────────────────┐
+│  Basic:  ~/research/<project>/  local storage            │
+│  Full:   Obsidian paper-pool.csv (cumulative, deduped)   │
+│          Obsidian papers/*.md (cards with wiki-links)     │
+│          Obsidian reviews/project/ (archived)             │
+│          Obsidian daily/date.md (research log)            │
+│          Zotero library auto-sync                         │
+└──────────────────────────────┬──────────────────────────┘
+                               ▼
+                   Notify user (Telegram / Feishu)
 ```
 
 ### 9-Source Search Coverage
@@ -263,103 +289,38 @@ When using non-frontier models (e.g., MiniMax M2.5), agents may forget to read S
 | SOUL.md | Warning at top: "⚠️ First step: read skills/xxx/SKILL.md" |
 | SKILL.md | Complete copy-paste commands instead of abstract instructions |
 
----
-
-## Comparison
-
-### TrendR vs autoresearch vs paper-distill-mcp
-
-```
-              Discovery      Deep-Read      Review       Knowledge Mgmt
-             ──────────     ──────────    ──────────    ──────────
-autoresearch      ·              ·             ·              ·
-
-distill-mcp   ████████          █             ·           ████
-
-TrendR        ████████       ████████      ████████      ████████
-              9-source       structured    full review   Obsidian + pool
-```
-
-### Feature Matrix
-
-| Dimension | autoresearch | paper-distill-mcp | TrendR |
-|-----------|-------------|-------------------|--------|
-| **Purpose** | LLM training optimization | Paper discovery + push | **Full literature review pipeline** |
-| **Core loop** | Edit code → train 5min → eval | Search 9 sources → score → push | **Search → read → write review → archive** |
-| **Hardware** | NVIDIA H100 | Any (API calls) | **Mac / Linux (API calls)** |
-| **Cost per run** | GPU electricity | ~$3-8 (Claude/GPT) | **~$0-1 (MiniMax)** |
-| **Search sources** | N/A | 9 | **9** |
-| **Scoring** | val_bpb (hard metric) | 4-dim weighted (code) | 1-5 score (agent) |
-| **Paper pool** | N/A | ✅ Persistent | **✅ Obsidian CSV** |
-| **Deep reading** | N/A | ❌ One-line summary | **✅ Structured notes** |
-| **Comparison matrix** | N/A | ❌ | **✅ matrix.csv** |
-| **Literature review** | N/A | ❌ | **✅ Full review** |
-| **Obsidian** | N/A | ✅ Note cards | **✅ Cards + reviews + logs + pool** |
-| **Zotero** | N/A | ✅ | ✅ (Full mode) |
-| **Dual AI review** | ❌ | ✅ | ❌ (extensible) |
-| **Agent architecture** | Single agent | No agent (pure tools) | **Multi-agent (3 subagents)** |
-| **Extra dependencies** | PyTorch + GPU | Python package | **Basic: none; Full: obsidian-cli + Python** |
-| **License** | MIT | AGPL-3.0 | **MIT** |
-
-### Design Philosophy
-
-**autoresearch** — *"Hand the experiment loop to AI"*. Human writes `program.md` (strategy), AI writes `train.py` (code). Elegant constraint design: single file, fixed 5-min budget, single metric. But GPU-only.
-
-**paper-distill-mcp** — *"Hand the screening grunt-work to code"*. Search/score/dedup are deterministic ops — Python code does them 100x cheaper than LLMs. 19 tool functions, 4-dim scoring, paper pool state machine. Solid engineering. But stops at "push 6 papers with one-line summaries".
-
-**TrendR** — *"Hand the entire literature review to multi-agent collaboration"*. Paper search is cheap (free APIs). **Deep reading and review writing are the real value**. 3 specialized subagents, Skill files as executable knowledge, Obsidian for persistent knowledge. Zero extra dependencies — agents call public APIs directly.
-
-### Complementary Use
-
-The three projects are not mutually exclusive. Strongest combo:
-
-```
-paper-distill-mcp (replace paper-scout for search frontend)
-  → 4-dim weighted scoring + code-level dedup + dual AI review
-
-TrendR analyzer + writer + vault (keep as backend)
-  → Structured notes + review writing + Obsidian persistence
-```
-
-TrendR is already compatible — Phase 1 can be replaced by anything that produces `candidates.csv`.
-
----
-
-## Cost Analysis
-
-Using MiniMax M2.5 ($0.30/1M input, $1.20/1M output):
-
-| Phase | Tokens | Cost |
-|-------|--------|------|
-| Phase 1: Search | ~100K | ~$0.15 |
-| Phase 2: Deep-read 20 papers | ~400K | ~$0.60 |
-| Phase 3: Gap check | ~50K | ~$0.08 |
-| Phase 4: Write review | ~200K | ~$0.30 |
-| Phase 5: Persist | ~30K | ~$0.05 |
-| **Total** | **~780K** | **~$1.18** |
-
-With MiniMax Portal (free OAuth tier): **$0**.
-
-| Approach | Per Run | Monthly (4x) |
-|----------|---------|-------------|
-| TrendR + MiniMax free | $0 | $0 |
-| TrendR + MiniMax API | ~$1.2 | ~$5 |
-| paper-distill + Claude | ~$3-5 | ~$15-20 |
-| Manual (@ $30/hr) | ~$240 | ~$960 |
-
----
-
 ## Customization
 
-**Add search sources**: Edit `skills/paper-scout/SKILL.md`, add new `web_fetch` calls following existing format.
+All core logic lives in Skill files (Markdown) — edit directly, no code changes needed.
 
-**Modify review template**: Edit `skills/review-writer/SKILL.md`.
+**Add search sources**
 
-**Modify note fields**: Edit `skills/paper-analyzer/SKILL.md`.
+Edit `skills/paper-scout/SKILL.md`, add a new `web_fetch` block following the existing format. Each block contains: URL template, parameter descriptions, response field parsing.
 
-**Switch models**: TrendR is model-agnostic. Configure in `openclaw.json` — MiniMax, Claude, GPT, DeepSeek, anything.
+**Modify review structure**
 
-**Daily paper tracking**: Tell your agent: "Set up daily arXiv cs.AI check at 9am".
+Edit `skills/review-writer/SKILL.md` to adjust section templates, quality checklists, and BibTeX formatting rules.
+
+**Modify note fields**
+
+Edit `skills/paper-analyzer/SKILL.md` to add or remove extraction dimensions (e.g. add a "Dataset" field or "Reproducibility" score).
+
+**Switch models**
+
+TrendR is model-agnostic. Configure in `openclaw.json`:
+```json
+{ "model": "minimax-m2.5" }    // Low cost (~$0-1/run)
+{ "model": "claude-opus-4-6" }  // Higher quality
+{ "model": "gpt-4o" }           // Alternative
+```
+
+**Extend the Full mode toolchain**
+
+Add your tool's install and registration logic in the Full mode section of `install.sh`, following the `_ensure_skill()` function pattern.
+
+**Daily paper tracking**
+
+Tell your agent: "Set up daily arXiv cs.AI check at 9am" — the agent will configure the scheduled task automatically.
 
 ---
 
