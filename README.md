@@ -1,7 +1,7 @@
 <p align="center">
   <h1 align="center">TrendR</h1>
   <p align="center"><strong>趋势研究 — 自动化文献综述 + Obsidian 知识管理</strong></p>
-  <p align="center">3 个 Agent · 4 个 Skill · 9 源搜索 · Basic / Full 两档安装</p>
+  <p align="center">3 个 Agent · 5 个 Skill · 9 源搜索 · Basic / Full 两档安装</p>
   <p align="center">
     <a href="#安装">安装</a> · <a href="#使用方法">使用</a> · <a href="#系统架构">架构</a>
   </p>
@@ -26,6 +26,17 @@ TrendR:
 ```
 
 灵感来源于 [karpathy/autoresearch](https://github.com/karpathy/autoresearch) 的自主研究循环，从「LLM 训练优化」重新设计为「论文搜索 + 文献综述」。
+
+---
+
+## 最新更新（2026-03-24）
+
+- 新增 `trendr-watchdog/supervisor.py`：夜间守护器，持续监控 `run_status/progress/关键产物`，卡住时自动续接。
+- `watchdog.py` 改为兼容入口：旧启动命令不需要改，仍会进入新 supervisor 逻辑。
+- 新增夜间报告落盘：
+  - `logs/overnight_report_<RUN_ID>.md`
+  - `logs/overnight_report.md`（最新镜像）
+- 完成判定增强：当 `review.md + references.bib` 稳定达到阈值（默认 30 分钟）时，守护器自动退出，避免“已完成仍反复注入”。
 
 ---
 
@@ -78,6 +89,7 @@ TrendR:
 | Skill | `paper-analyzer` | 结构化提取模板 |
 | Skill | `review-writer` | 综述写作模板 + 质量清单 |
 | Skill | `research-vault` | Obsidian 持久化 + 论文池索引 |
+| Skill | `trendr-watchdog` | 运行监督 + 超时自动续接 + 断点恢复 |
 
 **增强层（Full 模式专属）**
 
@@ -197,6 +209,40 @@ openclaw gateway restart
 "设置每天早上 9 点的 arXiv cs.AI 追踪"
 ```
 
+### 交互式入口（/trendr）
+
+输入 `/trendr` 后，默认进入快速模式；若要进入精确模式，输入 `/b`。
+
+- 研究主题：一句话描述研究问题（必填）
+- 研究轮次：`A=1-3` / `B=3-6` / `C=6-10`
+- 研究程度：`A=API 标准检索（快）` / `B=API + Scrapling（更全）` / `C=API + Scrapling + Tavily（常规最强）`
+- 可接受时长：用户输入分钟数
+- 用户可以只输入字母选项（A/B/C）
+- 示例：`主题：RL 多智能体做市；B / B / 60`
+
+TrendR 会先给出估时与计划调整：
+
+- 若时间预算明显不足（< 预计耗时 70%），先降轮次，再降源头规模
+- 回显预计完成时间（本地时区）
+- 二次确认“是否确认执行？（y / n）”
+
+### 运行进度与日志
+
+每次运行会在项目目录产出并持续刷新：
+
+- `run_status.json`：机器可读状态（phase、百分比、开始时间、预计剩余）
+- `progress.md`：人类可读进度条（Phase 1-5）
+- `logs/<RUN_ID>.log`：本次运行完整日志（用于复盘纠错）
+- `logs/latest.log`：最近一次运行日志快照
+- `logs/supervisor_<RUN_ID>.json`：守夜状态（注入次数、最近原因、停止原因）
+- `logs/overnight_report_<RUN_ID>.md`：夜间守护报告（停机原因、当前 phase、建议下一步）
+- `logs/overnight_report.md`：最新夜间守护报告镜像
+- `logs/watchdog.out`：watchdog 后台输出
+
+默认心跳频率：每 5-10 分钟至少更新一次状态与日志。  
+自动续接阈值：10 分钟无活动，或“文件已进入下一 phase 但 phase 字段 3 分钟未推进”。  
+提前完成收手：当 `review.md + references.bib` 稳定达到阈值（默认 30 分钟）时，supervisor 自动退出。
+
 ---
 
 ## 系统架构
@@ -225,6 +271,7 @@ openclaw gateway restart
 │  ┌─────▼───────────────▼────────────────▼──────────────────┐   │
 │  │            Skills（可执行的 Markdown 知识文件）              │   │
 │  │  paper-scout · paper-analyzer · review-writer · vault   │   │
+│  │  + trendr-watchdog（运行监督与自动续接）                  │   │
 │  └──────────────────────────┬──────────────────────────────┘   │
 │                             ▼                                   │
 │  ┌──────────────────────────────────────────────────────────┐   │
@@ -371,6 +418,7 @@ TrendR 与模型无关，在 `openclaw.json` 中配置即可：
 ## 已知局限
 
 - **非实时**：学术 API 有速率限制（arXiv: 3 秒/请求）；完整搜索需要几分钟
+- **网络策略差异会影响时长**：部分代理/DNS 会把学术域名解析到 `198.18.x.x`（fake-ip），`web_fetch` 可能被安全策略拦截；TrendR 已加入自动兜底检索，但覆盖率仍会下降
 - **非前沿模型可能遗忘**：MiniMax M2.5 有时会跳过 Skill 文件，尽管有三层防御
 - **全文阅读（Basic 模式）**：仅读摘要页；Full 模式开启 Nano-pdf 可精读 PDF 全文
 - **Zotero / Obsidian（Basic 模式）**：Basic 不含持久化；Full 模式自动配置
