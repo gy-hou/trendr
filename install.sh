@@ -34,11 +34,12 @@ echo -e "    ${DIM}paper-scout     多源学术论文搜索与评分${NC}"
 echo -e "    ${DIM}paper-analyzer  论文精读、结构化笔记、对比矩阵${NC}"
 echo -e "    ${DIM}review-lead     综述撰写、质量审查${NC}"
 echo ""
-echo -e "  ${GREEN}▸ 核心 Skills（4 个，必装）${NC}"
+echo -e "  ${GREEN}▸ 核心 Skills（5 个，必装）${NC}"
 echo -e "    ${DIM}paper-scout     9 源学术 API 搜索命令手册${NC}"
 echo -e "    ${DIM}paper-analyzer  结构化提取模板${NC}"
 echo -e "    ${DIM}review-writer   综述撰写模板 + BibTeX 生成${NC}"
 echo -e "    ${DIM}research-vault  Obsidian 持久化协议${NC}"
+echo -e "    ${DIM}trendr-watchdog 运行时监督 + 超时自动续接${NC}"
 echo ""
 echo -e "  ${BLUE}▸ 主链搜索栈（Basic 模式即可运行）${NC}"
 echo -e "    ${DIM}9-source APIs   arXiv / Semantic Scholar / OpenAlex / PubMed /${NC}"
@@ -163,6 +164,46 @@ if [ ! -d "$WORKSPACE" ]; then
 fi
 echo -e "  ${GREEN}✅${NC} Workspace: $WORKSPACE"
 
+# DNS fake-ip 预检（不阻断）
+DNS_FAKE_IP=false
+DNS_FAKE_IP_HITS=""
+if command -v node >/dev/null 2>&1; then
+    DNS_CHECK=$(node <<'NODE'
+const dns = require("dns").promises;
+const domains = ["export.arxiv.org", "api.semanticscholar.org", "api.openalex.org", "paperswithcode.com"];
+function isFakeIp(ip) {
+  const parts = ip.split(".");
+  if (parts.length !== 4) return false;
+  const a = Number(parts[0]);
+  const b = Number(parts[1]);
+  return Number.isFinite(a) && Number.isFinite(b) && a === 198 && (b === 18 || b === 19);
+}
+(async () => {
+  const hits = [];
+  for (const d of domains) {
+    try {
+      const rows = await dns.lookup(d, { all: true });
+      for (const r of rows) {
+        if (isFakeIp(r.address)) hits.push(`${d}=${r.address}`);
+      }
+    } catch {}
+  }
+  if (hits.length > 0) {
+    console.log(`fakeip:${hits.join(",")}`);
+  } else {
+    console.log("ok");
+  }
+})();
+NODE
+)
+    if [[ "$DNS_CHECK" == fakeip:* ]]; then
+        DNS_FAKE_IP=true
+        DNS_FAKE_IP_HITS="${DNS_CHECK#fakeip:}"
+        echo -e "  ${YELLOW}⚠️${NC}  检测到 DNS Fake-IP（198.18.x.x）: ${DNS_FAKE_IP_HITS}"
+        echo -e "     ${DIM}TrendR 会自动启用兜底检索，但学术 API 覆盖率可能下降${NC}"
+    fi
+fi
+
 # Full 模式：预检额外依赖（只报告，不阻断）
 SCRAPLING_OK=false; OBSIDIAN_OK=false; ZOTERO_OK=false
 
@@ -251,7 +292,7 @@ mkdir -p "$WORKSPACE/skills"
 
 # ── 核心 Skills（Basic + Full 均装）
 echo -e "  ${DIM}── 核心 Skills ──${NC}"
-for skill in paper-scout paper-analyzer review-writer research-vault; do
+for skill in paper-scout paper-analyzer review-writer research-vault trendr-watchdog; do
     TARGET="$WORKSPACE/skills/$skill"
     if [ -d "$TARGET" ]; then
         cp -r "$TARGET" "${TARGET}.bak.$(date +%s)" 2>/dev/null || true
@@ -420,8 +461,33 @@ else:
 PYEOF
 }
 
-BASE_SKILLS="paper-scout paper-analyzer review-writer research-vault arxiv-watcher summarize agent-browser"
+_ensure_agent_tool() {
+    local agent_id="$1"
+    local tool_name="$2"
+    python3 - "$OC_JSON" "$agent_id" "$tool_name" << 'PYEOF'
+import json, sys
+path, agent_id, tool_name = sys.argv[1], sys.argv[2], sys.argv[3]
+with open(path) as f:
+    c = json.load(f)
+agents = c.setdefault('agents', {}).setdefault('list', [])
+target = next((a for a in agents if a.get('id') == agent_id), None)
+if not target:
+    print(f'  agent not found: {agent_id}')
+    raise SystemExit(0)
+allow = target.setdefault('tools', {}).setdefault('allow', [])
+if tool_name not in allow:
+    allow.append(tool_name)
+    with open(path, 'w') as f:
+        json.dump(c, f, indent=2, ensure_ascii=False)
+    print(f'  added tool for {agent_id}: {tool_name}')
+else:
+    print(f'  tool already allowed for {agent_id}: {tool_name}')
+PYEOF
+}
+
+BASE_SKILLS="paper-scout paper-analyzer review-writer research-vault trendr-watchdog arxiv-watcher summarize agent-browser"
 for sk in $BASE_SKILLS; do _ensure_skill "$sk"; done
+_ensure_agent_tool "review-lead" "sessions_yield"
 
 if [ "$INSTALL_MODE" = "full" ]; then
     for sk in nano-pdf context7 zotero; do _ensure_skill "$sk"; done
@@ -493,13 +559,20 @@ echo ""
 # ══════════════════════════════════════════════════════════════════
 echo -e "${BLUE}${BOLD}[7/7] 更新 AGENTS.md...${NC}"
 AGENTS_MD="$WORKSPACE/AGENTS.md"
+touch "$AGENTS_MD"
 
-if grep -q "TrendR" "$AGENTS_MD" 2>/dev/null; then
-    echo -e "  ${YELLOW}⚠️${NC}  AGENTS.md 已包含 TrendR，跳过追加"
-else
-    VAULT_DISPLAY="${VAULT:-~/research/<project>}"
-    cat >> "$AGENTS_MD" << AGEOF
+# 兼容旧版：若已存在 TrendR 段落，先删除旧段再写入新版
+if grep -q "## 📚 TrendR — 自动化文献综述工作流" "$AGENTS_MD" 2>/dev/null; then
+    awk '
+    BEGIN { keep=1 }
+    /## 📚 TrendR — 自动化文献综述工作流/ { keep=0 }
+    keep { print }
+    ' "$AGENTS_MD" > "$AGENTS_MD.tmp" && mv "$AGENTS_MD.tmp" "$AGENTS_MD"
+    echo -e "  ${YELLOW}↺${NC}  已移除旧版 TrendR 段落"
+fi
 
+VAULT_DISPLAY="${VAULT:-~/research/<project>}"
+cat >> "$AGENTS_MD" << AGEOF
 
 ---
 
@@ -517,40 +590,128 @@ else
 回退层: Playwright（仅满足 5 种条件时触发，见 Search Escalation Rule）
 \`\`\`
 
+### /trendr 交互模式（参数化入口）
+当用户输入 \`/trendr\` 时，先收集参数，再执行：
+- 研究主题（必填，一句话）
+- 研究源头规模：\`A=20-30\` / \`B=30-50\` / \`C=50-100\`
+- 研究轮次：\`A=1-3\` / \`B=3-6\` / \`C=6-10\`
+- 研究程度：\`A=轻度\` / \`B=中度\` / \`C=深度\`
+- 用户可接受时长（分钟）
+- 用户可以只输入字母（A/B/C）而不必重复打字
+- 若缺少研究主题，不得进入 ETA 计算，必须先追问主题
+
+\`/trendr\` 首条回复必须使用如下模板（不得省略研究主题）：
+\`\`\`
+/trendr 启动！这是参数化研究流程，当前是快速模式，请先选择：
+（若要进入精确模式调整，输入：/b)
+
+1) 研究主题（必填）
+2) 研究轮次：A/B/C
+   - A = 1-3 轮（轻量）
+   - B = 3-6 轮（标准）
+   - C = 6-10 轮（深度）
+
+3) 研究程度：A/B/C
+   - A = API 标准检索（快）
+   - B = API + Scrapling（更全）
+   - C = API + Scrapling + Tavily（常规最强）
+
+4) 时间预算（分钟）
+
+示例：主题：RL 多智能体做市；B / B / 60
+\`\`\`
+
+先给出计划预估，不要直接开跑：
+- 估时模型：\`eta = 8 + source_factor + round_factor + depth_factor\`
+- \`source_factor\`: A=10, B=22, C=40
+- \`round_factor\`: A=8, B=20, C=35
+- \`depth_factor\`: A=0, B=10, C=20
+- 若用户预算 < \`eta * 0.7\`：自动调整计划（先降轮次，再降源头规模），并解释原因
+
+执行前必须回显：
+1. 调整后计划（源头/轮次/深度）
+2. 预计耗时与预计完成时间（本地时区）
+3. 询问“是否确认执行？（y / n）”
+
+### 运行可视化与日志（必做）
+\`\`\`
+session_status: {}
+### 记录当前主会话 ID 到 [OWNER_SESSION_ID]
+exec: mkdir -p ~/research/[PROJECT]/{papers,notes,logs}
+exec: RUN_ID=$(date +%Y%m%d_%H%M%S); echo "$RUN_ID" > ~/research/[PROJECT]/logs/.current_run_id
+write: ~/research/[PROJECT]/run_status.json
+{
+  "run_id":"[RUN_ID]",
+  "status":"running",
+  "phase":"init",
+  "progress_percent":0,
+  "owner_session_id":"[OWNER_SESSION_ID]",
+  "started_at":"[ISO8601]",
+  "eta_minutes":[ETA_MIN]
+}
+write: ~/research/[PROJECT]/progress.md
+[----------] 0% | Phase 0/5 | 初始化
+exec: PROJECT="[PROJECT]" && RUN_ID="[RUN_ID]" && SESSION_ID="[OWNER_SESSION_ID]" && nohup python3 ~/.openclaw/workspace/skills/trendr-watchdog/supervisor.py --project "\$PROJECT" --run-id "\$RUN_ID" --session-id "\$SESSION_ID" --poll-sec 60 --idle-timeout-sec 600 --phase-mismatch-grace-sec 180 --artifact-complete-grace-sec 1800 --resume-cooldown-sec 300 --heartbeat-sec 300 --max-resume 12 >> ~/research/"\$PROJECT"/logs/watchdog.out 2>&1 & echo \$! > ~/research/"\$PROJECT"/logs/watchdog.pid
+\`\`\`
+
+刷新规则（强制）：
+- 每个 phase 开始/结束都要刷新 \`run_status.json + progress.md\`
+- 每 5-10 分钟至少写一次心跳（即使无新结果）
+- 事件日志追加到 \`~/research/[PROJECT]/logs/[RUN_ID].log\`
+- 每次写完日志后同步覆盖 \`~/research/[PROJECT]/logs/latest.log\`
+- watchdog 会在“10 分钟无更新”或“文件已到下一阶段但 phase 未推进 3 分钟”时自动注入续接指令
+
 ### Phase 1 — 论文搜索（必须先读 SKILL.md）
 \`\`\`
-exec: mkdir -p ~/research/[PROJECT]/{papers,notes}
+write: ~/research/[PROJECT]/progress.md
+[##--------] 20% | Phase 1/5 Discovery | 召回候选论文
 sessions_spawn: {
-  task: "先读 skills/paper-scout/SKILL.md，搜索：\n[queries]\n项目: ~/research/[PROJECT]/",
-  agentId: "paper-scout", mode: "run", runTimeoutSeconds: 300
+  task: "先读 skills/paper-scout/SKILL.md，搜索：\n[queries]\n项目: ~/research/[PROJECT]/。若 web_fetch 出现 private/internal/special-use IP 拦截，切到 arxiv-watcher + tavily-search + web_search + browser 兜底，并仍输出 candidates.csv。",
+  agentId: "paper-scout", mode: "run", runTimeoutSeconds: 900
 }
+# 必须阻塞等待到终态，不能只回“已启动”
+sessions_yield: { sessionId: "[SCOUT_SESSION_ID]" }
+read: ~/research/[PROJECT]/candidates.csv
+read: ~/research/[PROJECT]/search_log.md
 \`\`\`
 输出: candidates.csv + search_log.md
+若用户设置了候选数量下限（A/B/C 对应 20-30/30-50/50-100），未达标则继续补检索直到达标或写明失败原因。
 
 ### Phase 2 — 精读（relevance_score >= 4）
 \`\`\`
+write: ~/research/[PROJECT]/progress.md
+[#####-----] 55% | Phase 2/5 Analysis | 精读与结构化提取
 sessions_spawn: {
   task: "先读 skills/paper-analyzer/SKILL.md，分析：\n[paper_ids]\n项目: ~/research/[PROJECT]/",
-  agentId: "paper-analyzer", mode: "run", runTimeoutSeconds: 600
+  agentId: "paper-analyzer", mode: "run", runTimeoutSeconds: 1200
 }
+sessions_yield: { sessionId: "[ANALYZER_SESSION_ID]" }
+read: ~/research/[PROJECT]/matrix.csv
 \`\`\`
 输出: notes/*.md + matrix.csv
 
 ### Phase 3 — 空白检测
+write: ~/research/[PROJECT]/progress.md
+[#######---] 80% | Phase 3/5 Gap Check | 覆盖率检查
 读 notes + matrix.csv → 有空白 → 回 Phase 1 → 充分 → Phase 4
 
 ### Phase 4 — 撰写综述
+write: ~/research/[PROJECT]/progress.md
+[#########-] 95% | Phase 4/5 Writing | 生成综述
 先读 \`skills/review-writer/SKILL.md\` → 输出 review.md + references.bib
 
 ### Phase 5 — 持久化（Full 模式）
+write: ~/research/[PROJECT]/progress.md
+[##########] 100% | Phase 5/5 Persist | 完成
 先读 \`skills/research-vault/SKILL.md\` → candidates.csv → Obsidian 论文池 → 论文卡片 → reviews/ → daily/
+exec: PROJECT="[PROJECT]" && PID_FILE=~/research/"\$PROJECT"/logs/watchdog.pid && if [ -f "\$PID_FILE" ]; then kill "\$(cat \"\$PID_FILE\")" 2>/dev/null || true; fi
 
 ### ⚠️ 防遗忘规则
 派发 subagent 时，任务描述必须以 "先读 skills/xxx/SKILL.md" 开头。
+禁止在 subagent 仍在运行时宣布完成。必须看到本阶段输出文件后再进入下一阶段。
 
 AGEOF
-    echo -e "  ${GREEN}✅${NC} AGENTS.md 已追加 TrendR 工作流"
-fi
+echo -e "  ${GREEN}✅${NC} AGENTS.md 已更新 TrendR 工作流"
 echo ""
 
 # ══════════════════════════════════════════════════════════════════
@@ -562,7 +723,7 @@ echo -e "${CYAN}${BOLD}╚══════════════════
 echo ""
 echo -e "  ${BOLD}模式:${NC} $([ "$INSTALL_MODE" = "full" ] && echo "${CYAN}Full${NC}" || echo "${GREEN}Basic${NC}")"
 echo -e "  ${BOLD}Agents:${NC}  paper-scout · paper-analyzer · review-lead"
-echo -e "  ${BOLD}Skills:${NC}  paper-scout (9源) · paper-analyzer · review-writer · research-vault"
+echo -e "  ${BOLD}Skills:${NC}  paper-scout (9源) · paper-analyzer · review-writer · research-vault · trendr-watchdog"
 if [ "$INSTALL_MODE" = "full" ]; then
     EXTRAS="nano-pdf · context7"
     [ "$SCRAPLING_OK" = "true" ] && EXTRAS="$EXTRAS · scrapling"
@@ -589,6 +750,13 @@ if [ "$INSTALL_MODE" = "full" ] && [ "$ZOTERO_OK" != "true" ]; then
     STEP=$((STEP+1))
 fi
 
+if [ "$DNS_FAKE_IP" = "true" ]; then
+    echo "  $STEP. 检测到 DNS Fake-IP（198.18.x.x），建议关闭代理 fake-ip 或改 redir-host："
+    echo "     受影响域名: $DNS_FAKE_IP_HITS"
+    echo "     说明: TrendR 已启用兜底检索，但主链 API 命中率会受影响"
+    STEP=$((STEP+1))
+fi
+
 if [ "$INSTALL_MODE" = "full" ] && command -v obsidian-cli >/dev/null 2>&1; then
     echo "  $STEP. 设置 obsidian-cli 默认 vault:"
     echo "     obsidian-cli set-default --vault $(basename "${VAULT:-OpenClaw-Vault}")"
@@ -602,9 +770,14 @@ STEP=$((STEP+1))
 echo "  $STEP. 对 Mac_Javis 说:"
 echo "     '帮我调研 [主题] 的最新进展'"
 echo "     '快速扫描 [主题]'  ← 只搜索，不精读"
+echo "     '/trendr'          ← 交互式选择规模/轮次/深度/时长"
 if [ "$INSTALL_MODE" = "full" ] && [ "$SCRAPLING_OK" = "true" ]; then
     echo "     '深挖 [主题]'       ← 开启 Scrapling 深挖"
 fi
+echo "  $STEP. 运行中查看进度/日志:"
+echo "     cat ~/research/<project>/progress.md"
+echo "     tail -f ~/research/<project>/logs/latest.log"
+STEP=$((STEP+1))
 echo ""
 
 if [ "$INSTALL_MODE" = "basic" ]; then
