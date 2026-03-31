@@ -29,7 +29,11 @@ TrendR:
 
 ---
 
-## 最新更新（2026-03-24）
+## 最新更新（2026-04-01）
+
+- 修复 TrendR 入口一致性：`/trendr`、`/trendr 主题...`、`trendr 研究 ...` 统一进入参数化交互，不再直接开跑。
+- 新增执行前硬闸门：参数不完整（例如仅给主题）时必须继续询问；只有用户明确 `y/yes/确认/开始/继续` 后才会派发 `review-lead`。
+- 安装器新增协议文件同步：`install.sh` 会把 `protocols/trendr-protocol.md` 与 `protocols/research-team-protocol.md` 安装到 `~/.openclaw/workspace/protocols/`，避免规则漂移。
 
 - 新增 `trendr-watchdog/supervisor.py`：夜间守护器，持续监控 `run_status/progress/关键产物`，卡住时自动续接。
 - `watchdog.py` 改为兼容入口：旧启动命令不需要改，仍会进入新 supervisor 逻辑。
@@ -211,7 +215,7 @@ openclaw gateway restart
 
 ### 交互式入口（/trendr）
 
-输入 `/trendr` 后，默认进入快速模式；若要进入精确模式，输入 `/b`。
+输入 `/trendr`、`/trendr 主题...` 或 `trendr 研究 ...` 后，默认进入快速模式；若要进入精确模式，输入 `/b`。
 
 - 研究主题：一句话描述研究问题（必填）
 - 研究轮次：`A=1-3` / `B=3-6` / `C=6-10`
@@ -225,6 +229,7 @@ TrendR 会先给出估时与计划调整：
 - 若时间预算明显不足（< 预计耗时 70%），先降轮次，再降源头规模
 - 回显预计完成时间（本地时区）
 - 二次确认“是否确认执行？（y / n）”
+- 在确认前不会派发 `review-lead`，也不会输出“已启动/已派发/流水线执行中”执行态文案
 
 ### 运行进度与日志
 

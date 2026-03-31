@@ -38,7 +38,8 @@
   - `exec: PROJECT="[project]" && RUN_ID="[RUN_ID]" && SESSION_ID="[OWNER_SESSION_ID]" && nohup python3 ~/.openclaw/workspace/skills/trendr-watchdog/supervisor.py --project "$PROJECT" --run-id "$RUN_ID" --session-id "$SESSION_ID" --poll-sec 60 --idle-timeout-sec 600 --phase-mismatch-grace-sec 180 --artifact-complete-grace-sec 1800 --resume-cooldown-sec 300 --heartbeat-sec 300 --max-resume 12 >> ~/research/"$PROJECT"/logs/watchdog.out 2>&1 & echo $! > ~/research/"$PROJECT"/logs/watchdog.pid`
 
 ### 0.5 参数化计划（若任务给出约束）
-- `/trendr` 默认进入快速模式；若用户输入 `/b`，切换到精确模式
+- TrendR 参数化入口（`/trendr`、`/trendr 主题...`、`trendr 研究 ...`）默认进入快速模式；若用户输入 `/b`，切换到精确模式
+- 若参数不完整（尤其仅给主题）或用户未明确确认（`y/yes/确认/开始/继续`），禁止进入 Phase 1
 - `/trendr` 首条交互必须使用以下模板（尽量原样）：
   ```
   /trendr 启动！这是参数化研究流程，当前是快速模式，请先选择：
@@ -66,6 +67,7 @@
   - 深度（A=轻度 / B=中度 / C=深度）
   - 时间预算（分钟）
 - 若用户只给了 A/B/C 和时间、未给研究主题：先追问主题，不得直接进入 ETA 计算
+- 若用户只给了主题（如 `/trendr 主题：智能体决策系统` 或 `trendr 研究 智能体决策系统`）：仍视为参数不完整，必须继续询问
 - /trendr 首条交互必须包含“研究主题”问题，并给出示例回复格式：`主题：xxx；B / B / B / 30`
 - 估算公式：`eta = 8 + source_factor + round_factor + depth_factor`
   - `source_factor`: A=10, B=22, C=40
@@ -73,6 +75,7 @@
   - `depth_factor`: A=0, B=10, C=20
 - 若预算 < `eta * 0.7`，自动调整（先降轮次，再降源头规模），并把调整原因写入日志
 - ETA 回显后必须追加：`是否确认执行？（y / n）`
+- 在用户确认前，禁止输出“已启动/已派发/流水线执行中”等执行态文案
 
 ### Phase 1: Discovery
 - 把研究主题分解为 5-10 个搜索查询
