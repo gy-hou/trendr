@@ -1,7 +1,7 @@
 <p align="center">
   <h1 align="center">TrendR</h1>
   <p align="center"><strong>Trend Research — Automated Literature Review + Obsidian Knowledge Management</strong></p>
-  <p align="center">3 Agents · 4 Skills · 9-Source Search · Basic / Full Install Modes</p>
+  <p align="center">3 Agents · 5 Skills · 9-Source Search · Basic / Full Install Modes</p>
   <p align="center">
     <a href="#installation">Install</a> · <a href="#usage">Usage</a> · <a href="#architecture">Architecture</a>
   </p>
@@ -53,6 +53,7 @@ Inspired by [karpathy/autoresearch](https://github.com/karpathy/autoresearch)'s 
 | Skill | `paper-analyzer` | Structured extraction templates |
 | Skill | `review-writer` | Review writing template + quality checklist |
 | Skill | `research-vault` | Obsidian persistence + paper pool index |
+| Skill | `trendr-watchdog` | Runtime watchdog + timeout auto-resume + checkpoint recovery |
 
 **Enhancement Layer (Full mode only)**
 
@@ -153,6 +154,45 @@ openclaw gateway restart
 "Set up daily arXiv cs.AI check at 9am"
 ```
 
+### Interactive Entry (`/trendr`)
+
+When users type `/trendr`, `/trendr Topic: ...`, or `trendr research ...`, it enters quick confirmation mode (`y/n/r`) by default. To switch to precise mode, input `/b`.
+
+Default quick confirmation mode:
+- `y`: accept defaults (3 rounds + standard 10 candidates/round + 3 citations)
+- `n`: enter custom parameters
+- `r`: force re-run Scout
+
+Precise mode (`/b`):
+- Research topic: one-sentence problem statement (required)
+- Iteration rounds: `A=1-3` / `B=3-6` / `C=6-10`
+- Research level: `A=API standard` / `B=API + Scrapling` / `C=API + Scrapling + Tavily`
+- Time budget (minutes)
+- Users can reply with option letters only (A/B/C)
+- Example: `Topic: RL multi-agent market making; B / B / 60`
+- Topic-only input is still incomplete (e.g. `/trendr Topic: Agent Decision Systems`) and must continue parameter collection before execution.
+
+TrendR then returns a feasibility-adjusted plan:
+
+- If budget is too low (< 70% of estimated runtime), reduce rounds first, then source target
+- Show estimated completion time in local timezone
+- Ask for explicit confirmation: `Confirm execution? (y / n)`
+- Before explicit confirmation (`y/yes/confirm/start/continue`), TrendR will not dispatch `review-lead` and will not emit "started/dispatched/pipeline running" status.
+
+### Runtime Progress + Logs
+
+Each run now writes and refreshes:
+
+- `run_status.json`: machine-readable status (phase, percent, started_at, eta)
+- `progress.md`: human-readable progress bar (Phase 1-5)
+- `logs/<RUN_ID>.log`: full per-run log for debugging/correction
+- `logs/latest.log`: snapshot of the latest run
+- `logs/watchdog_<RUN_ID>.json`: auto-resume state (injection count + latest reason)
+- `logs/watchdog.out`: watchdog background stdout/stderr
+
+Default heartbeat: update status/log at least every 5-10 minutes.  
+Auto-resume threshold: 10 minutes without activity, or 3 minutes of phase/file mismatch.
+
 ---
 
 ## Architecture
@@ -181,6 +221,7 @@ openclaw gateway restart
 │  ┌─────▼───────────────▼────────────────▼──────────────────┐   │
 │  │            Skills (executable Markdown knowledge files)   │   │
 │  │  paper-scout · paper-analyzer · review-writer · vault    │   │
+│  │  + trendr-watchdog (runtime auto-resume watchdog)        │   │
 │  └──────────────────────────┬──────────────────────────────┘   │
 │                             ▼                                   │
 │  ┌──────────────────────────────────────────────────────────┐   │
@@ -327,6 +368,7 @@ Tell your agent: "Set up daily arXiv cs.AI check at 9am" — the agent will conf
 ## Known Limitations
 
 - **Not real-time**: Academic APIs have rate limits (arXiv: 3s/request); full search takes minutes
+- **Network policy can change runtime quality**: some proxy/DNS setups resolve academic domains to `198.18.x.x` (fake-ip), which may trigger `web_fetch` SSRF blocking; TrendR now auto-falls back to alternate search paths, but coverage can still drop
 - **Non-frontier models may forget**: MiniMax M2.5 sometimes skips Skill files despite 3-layer defense
 - **Full-text reading (Basic mode)**: Abstract pages only; Full mode enables Nano-pdf for full PDF reading
 - **Zotero / Obsidian (Basic mode)**: Not included; Full mode auto-configures both

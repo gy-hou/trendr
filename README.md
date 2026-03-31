@@ -32,6 +32,7 @@ TrendR:
 ## 最新更新（2026-04-01）
 
 - 修复 TrendR 入口一致性：`/trendr`、`/trendr 主题...`、`trendr 研究 ...` 统一进入参数化交互，不再直接开跑。
+- 恢复默认快速确认交互：先走 `y/n/r`（接受默认 / 自定义 / 重跑 Scout）；输入 `/b` 再进入 A/B/C 精确模式。
 - 新增执行前硬闸门：参数不完整（例如仅给主题）时必须继续询问；只有用户明确 `y/yes/确认/开始/继续` 后才会派发 `review-lead`。
 - 安装器新增协议文件同步：`install.sh` 会把 `protocols/trendr-protocol.md` 与 `protocols/research-team-protocol.md` 安装到 `~/.openclaw/workspace/protocols/`，避免规则漂移。
 
@@ -215,8 +216,14 @@ openclaw gateway restart
 
 ### 交互式入口（/trendr）
 
-输入 `/trendr`、`/trendr 主题...` 或 `trendr 研究 ...` 后，默认进入快速模式；若要进入精确模式，输入 `/b`。
+输入 `/trendr`、`/trendr 主题...` 或 `trendr 研究 ...` 后，默认进入快速确认模式（`y/n/r`）；若要进入精确模式，输入 `/b`。
 
+默认快速确认模式：
+- `y`：接受默认参数（3轮 + 标准10篇 + 引用3篇）
+- `n`：进入自定义参数
+- `r`：强制重跑 Scout
+
+精确模式（`/b`）：
 - 研究主题：一句话描述研究问题（必填）
 - 研究轮次：`A=1-3` / `B=3-6` / `C=6-10`
 - 研究程度：`A=API 标准检索（快）` / `B=API + Scrapling（更全）` / `C=API + Scrapling + Tavily（常规最强）`
