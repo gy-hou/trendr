@@ -154,23 +154,23 @@ openclaw gateway restart
 "Set up daily arXiv cs.AI check at 9am"
 ```
 
-### Interactive Entry (`/trendr`)
+### Interactive Entry (`/tr`)
 
-When users type `/trendr`, `/trendr Topic: ...`, or `trendr research ...`, it enters quick confirmation mode (`y/n/r`) by default. To switch to precise mode, input `/b`.
+Primary command is `/tr` (legacy `/trendr` remains compatible).
 
-Default quick confirmation mode:
-- `y`: accept defaults (3 rounds + standard 10 candidates/round + 3 citations)
-- `n`: enter custom parameters
-- `r`: force re-run Scout
+When users type `/tr`, `/tr Topic: ...`, `/trendr`, or `trendr research ...`, TrendR enters parameterized quick mode. To switch to precise mode, input `/b`.
 
-Precise mode (`/b`):
+Parameterized quick mode:
 - Research topic: one-sentence problem statement (required)
 - Iteration rounds: `A=1-3` / `B=3-6` / `C=6-10`
 - Research level: `A=API standard` / `B=API + Scrapling` / `C=API + Scrapling + Tavily`
 - Time budget (minutes)
 - Users can reply with option letters only (A/B/C)
 - Example: `Topic: RL multi-agent market making; B / B / 60`
-- Topic-only input is still incomplete (e.g. `/trendr Topic: Agent Decision Systems`) and must continue parameter collection before execution.
+- Topic-only input is still incomplete (e.g. `/tr Topic: Agent Decision Systems`) and must continue parameter collection before execution.
+
+Precise mode (`/b`):
+- Fine-grained tuning on top of A/B/C + budget constraints.
 
 TrendR then returns a feasibility-adjusted plan:
 

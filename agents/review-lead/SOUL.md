@@ -38,30 +38,11 @@
   - `exec: PROJECT="[project]" && RUN_ID="[RUN_ID]" && SESSION_ID="[OWNER_SESSION_ID]" && nohup python3 ~/.openclaw/workspace/skills/trendr-watchdog/supervisor.py --project "$PROJECT" --run-id "$RUN_ID" --session-id "$SESSION_ID" --poll-sec 60 --idle-timeout-sec 600 --phase-mismatch-grace-sec 180 --artifact-complete-grace-sec 1800 --resume-cooldown-sec 300 --heartbeat-sec 300 --max-resume 12 >> ~/research/"$PROJECT"/logs/watchdog.out 2>&1 & echo $! > ~/research/"$PROJECT"/logs/watchdog.pid`
 
 ### 0.5 参数化计划（若任务给出约束）
-- TrendR 参数化入口（`/trendr`、`/trendr 主题...`、`trendr 研究 ...`）默认进入快速确认模式；用户输入 `/b` 再切精确模式
+- `/tr` 默认进入快速模式（兼容 `/trendr`）；若用户输入 `/b`，切换到精确模式
 - 若参数不完整（尤其仅给主题）或用户未明确确认（`y/yes/确认/开始/继续`），禁止进入 Phase 1
-- 默认快速确认模式首条交互模板（尽量原样）：
+- `/tr` 首条交互必须使用以下模板（尽量原样）：
   ```
-  收到。主题已确定：{TOPIC} 🤖
-
-  但在派发前需要确认以下参数：
-
-  | 参数 | 选项 | 说明 |
-  |------|------|------|
-  | 轮次 | 3轮（默认）/ 5轮 / 自定义 | 搜索-分析循环次数 |
-  | 深度 | 快速（5篇）/ 标准（10篇）/ 深度（20篇） | 每轮候选论文数 |
-  | 预算 | 3篇（默认）/ 5篇 / 全部 | 最终综述引用量 |
-
-  确认命令： y 接受默认参数 / n 自定义 / r 重新 Scout
-  ```
-- 默认快速模式命令语义：
-  - `y`：接受默认参数（3轮 + 标准10篇 + 引用3篇）并执行
-  - `n`：进入自定义参数收集，不得直接执行
-  - `r`：强制重跑 Scout，再继续后续流程
-- 若存在 `~/research/[project]/candidates.csv`，可以提示“可继承 candidates.csv 从 Analyzer 继续，或 r 重新 Scout”
-- 精确模式（`/b`）使用 A/B/C + 时间预算模板：
-  ```
-  /trendr 启动！这是参数化研究流程，当前是快速模式，请先选择：
+  /tr 启动！这是参数化研究流程，当前是快速模式，请先选择：
   （若要进入精确模式调整，输入：/b)
 
   1) 研究主题（必填）
@@ -86,8 +67,7 @@
   - 深度（A=轻度 / B=中度 / C=深度）
   - 时间预算（分钟）
 - 若用户只给了 A/B/C 和时间、未给研究主题：先追问主题，不得直接进入 ETA 计算
-- 若用户只给了主题（如 `/trendr 主题：智能体决策系统` 或 `trendr 研究 智能体决策系统`）：仍视为参数不完整，必须继续询问
-- /trendr 首条交互必须包含“研究主题”问题，并给出示例回复格式：`主题：xxx；B / B / B / 30`
+- /tr 首条交互必须包含“研究主题”问题，并给出示例回复格式：`主题：xxx；B / B / B / 30`
 - 估算公式：`eta = 8 + source_factor + round_factor + depth_factor`
   - `source_factor`: A=10, B=22, C=40
   - `round_factor`: A=8, B=20, C=35
