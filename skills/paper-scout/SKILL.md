@@ -6,9 +6,17 @@ metadata: {"openclaw": {}}
 
 # Paper Scout Skill
 
-9 源学术论文发现与筛选。所有 API 均为公开免费，直接通过 web_fetch 调用，无需安装任何额外 MCP server。
+9 源学术论文发现与筛选。所有 API 均为公开免费，直接通过 HTTP GET 调用，无需安装任何额外 MCP server。
 
 > ⚠️ 每次执行搜索任务前，完整阅读本文件。不要跳过任何部分。
+
+## Multi-Platform Compatibility
+
+This skill uses `web_fetch:` syntax (OpenClaw native). On other platforms:
+- **Claude Code**: Use `WebFetch` tool or `curl` via Bash. The URL in `web_fetch: { url: "..." }` is a standard HTTP GET.
+- **Codex**: Use `fetch()`, `curl`, or `requests.get()`. Same URLs apply.
+- **`exec:`** commands: Use your shell execution tool (Bash, terminal, etc.)
+- All API URLs are plain REST endpoints — copy the URL and call with any HTTP client.
 
 ## 搜索源总览
 
@@ -33,6 +41,66 @@ metadata: {"openclaw": {}}
 - **通用/跨学科** → Semantic Scholar + OpenAlex + CrossRef + arXiv
 
 每个源之间等待 2-3 秒避免速率限制。
+
+## 稳定性与兜底（必须执行）
+
+如果出现以下任一情况，不得直接结束任务，必须进入兜底检索：
+
+- `web_fetch` 返回：`Blocked: resolves to private/internal/special-use IP address`
+- 连续 2 个数据源出现 429 / 5xx / 空响应
+- 单轮搜索 120 秒无新增候选论文
+
+兜底检索顺序（按优先级）：
+
+1. `arxiv-watcher`（优先拿可用论文元数据）
+2. Chrome CDP 浏览器搜索（Google Scholar / Semantic Scholar 网页版）
+3. `tavily-search`（跨站点学术检索）
+4. `web_search`（补齐来源覆盖）
+
+兜底查询模板：
+
+```text
+academic paper [QUERY] site:arxiv.org OR site:semanticscholar.org OR site:openalex.org
+```
+
+进入兜底后仍要继续评分、去重，并输出标准 `candidates.csv`。
+
+### Chrome CDP 浏览器兜底
+
+前置条件：
+1. 检查 Chrome CDP 是否已启动：`exec: curl -fsS http://127.0.0.1:19222/json/version`
+2. 如果未启动，先执行：`exec: bash scripts/start-chrome-cdp.sh` 或 `exec: bash ~/.openclaw/workspace/scripts/start-chrome-cdp.sh`
+3. 确认返回 `ready:19222` 后再继续
+4. 浏览器兜底只用于临时提取结果，不保留学术站页面；抓取完成后必须关闭当前 tab
+
+用 browser 工具搜索（profile 必须是 `cdp`，不是旧 profile）：
+
+```bash
+browser --profile cdp navigate "https://scholar.google.com/scholar?q=multi-agent+reinforcement+learning+2025"
+browser --profile cdp eval "Array.from(document.querySelectorAll('.gs_ri')).slice(0,20).map(e => ({title: e.querySelector('.gs_rt')?.textContent, url: e.querySelector('.gs_rt a')?.href, snippet: e.querySelector('.gs_rs')?.textContent, cite: e.querySelector('.gs_fl a')?.textContent})).filter(e => e.title)"
+```
+
+Semantic Scholar 网页版兜底：
+
+```bash
+browser --profile cdp navigate "https://www.semanticscholar.org/search?q=multi-agent+systems&year%5B0%5D=2024&year%5B1%5D=2025"
+browser --profile cdp eval "Array.from(document.querySelectorAll('[data-test-id=\"result\"]')).slice(0,20).map(e => ({title: e.querySelector('.cl-paper-title')?.textContent, url: e.querySelector('.cl-paper-title a')?.href, year: e.querySelector('.cl-paper-pubdate')?.textContent, cite_count: e.querySelector('.cl-paper-stats')?.textContent})).filter(e => e.title)"
+```
+
+OpenClaw 原生命令下，优先用 `open/evaluate/close` 模式，不要长期停留在搜索结果页：
+
+```bash
+OPEN_OUT=$(openclaw browser --browser-profile cdp open "https://arxiv.org/search/?query=multi-agent+systems&searchtype=all")
+TAB_ID=$(printf '%s\n' "$OPEN_OUT" | awk '/^id:/{print $2}' | tail -n1)
+openclaw browser --browser-profile cdp evaluate --fn '() => Array.from(document.querySelectorAll(\"li.arxiv-result\")).slice(0, 20).map(e => ({title: e.querySelector(\"p.title\")?.textContent?.trim(), url: e.querySelector(\"p.list-title a\")?.href, abstract: e.querySelector(\"span.abstract-full\")?.textContent?.trim()})).filter(e => e.title)'
+openclaw browser --browser-profile cdp close "$TAB_ID"
+```
+
+执行约束：
+- 一次只开一个学术搜索 tab
+- 提取完成立即 `close "$TAB_ID"`；不要把 arXiv / Google Scholar / Semantic Scholar 页面留在前台
+- 如果需要切换下一个站点，重新 `open` 新 tab，不复用旧 tab
+- 若遇到 `selected page has been closed`，重新 `open` 当前 URL，不要继续复用失效 tab
 
 ## 深挖模式（Scrapling）
 
@@ -264,7 +332,9 @@ web_fetch: { url: "https://paperswithcode.com/api/v1/papers/[PAPER_ID]/repositor
 ```
 
 **browser（JS 重页面兜底）：**
-当 web_fetch 返回乱码或空内容时（Google Scholar 等），用 browser 工具。
+当 web_fetch 返回乱码或空内容时（Google Scholar 等），用 `browser --profile cdp` 工具（必须使用 `cdp` profile，不是默认 profile）。
+如果 browser 报错 `profile not running`，先执行 `bash scripts/start-chrome-cdp.sh` 或 `bash ~/.openclaw/workspace/scripts/start-chrome-cdp.sh`。
+如果用 OpenClaw 原生命令抓取，按 `open -> evaluate -> close` 执行；不要让学术站搜索页长期停留不关。
 
 ---
 
@@ -306,6 +376,8 @@ write: ~/research/[PROJECT]/candidates.csv
 paper_id,title,authors,year,source,venue,citation_count,relevance_score,has_code,abstract_snippet
 ```
 
+禁止输出自定义 header。若你手头已有非标准列，先映射回标准 10 列再写文件。
+
 字段规则：
 - `paper_id`: arXiv ID（如 2301.12345）或 DOI 或 S2 paper ID
 - `authors`: 分号分隔，姓在前（如 "Smith J;Lee K"）
@@ -314,6 +386,9 @@ paper_id,title,authors,year,source,venue,citation_count,relevance_score,has_code
 - `relevance_score`: 1-5 浮点数（含加分后的）
 - `has_code`: yes | no | unknown
 - `abstract_snippet`: 前 150 字符，内部逗号替换为分号
+
+即使只找到少量论文，也必须写出合法 CSV（至少包含 header + 可用行）。
+如果确实 0 结果，也必须写 header，并在 `search_log.md` 说明失败原因与已尝试的兜底路径。
 
 ### search_log.md（推荐输出）
 
@@ -340,6 +415,9 @@ Date: [YYYY-MM-DD]
 - After dedup: Y
 - Score >= 3: Z (saved to candidates.csv)
 - Score >= 4: W (recommended for deep analysis)
+- Fallback triggered: [yes/no]
+- Fallback reason: [network block / rate-limit / empty responses / none]
+- Network block signature: [Blocked: resolves to private/internal/special-use IP address / none]
 ```
 
 ### 深挖模式附加输出（开启时必须有）

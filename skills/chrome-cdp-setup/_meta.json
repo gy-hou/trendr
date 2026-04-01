@@ -1,0 +1,8 @@
+{
+  "name": "chrome-cdp-setup",
+  "version": "1.0.0",
+  "description": "Chrome 146+ CDP remote debugging dual-instance architecture and troubleshooting guide",
+  "author": "trendr",
+  "tags": ["chrome", "cdp", "browser", "debugging", "automation"],
+  "created": "2026-04-01"
+}

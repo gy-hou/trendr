@@ -1,7 +1,7 @@
 <p align="center">
   <h1 align="center">TrendR</h1>
-  <p align="center"><strong>趋势研究 — 自动化文献综述 + Obsidian 知识管理</strong></p>
-  <p align="center">3 个 Agent · 5 个 Skill · 9 源搜索 · Basic / Full 两档安装</p>
+  <p align="center"><strong>趋势研究 — 自动化文献综述 + 平台热点监控 + Obsidian 知识管理</strong></p>
+  <p align="center">4 个 Agent · 8 个 Skill · 9 源搜索 · 9 平台热点 · Basic / Full 两档安装</p>
   <p align="center">
     <a href="#安装">安装</a> · <a href="#使用方法">使用</a> · <a href="#系统架构">架构</a>
   </p>
@@ -26,6 +26,8 @@ TrendR:
 ```
 
 灵感来源于 [karpathy/autoresearch](https://github.com/karpathy/autoresearch) 的自主研究循环，从「LLM 训练优化」重新设计为「论文搜索 + 文献综述」。
+
+> TrendR is a research-agent harness system, evolving toward a domain-specific agent OS.
 
 ---
 
@@ -91,11 +93,17 @@ TrendR:
 | Agent | `paper-scout` | 9 源搜索 + 评分 + 去重 |
 | Agent | `paper-analyzer` | 精读 + 结构化笔记 + 对比矩阵 |
 | Agent | `review-lead` | 编排流水线 + 撰写综述 |
+| Agent | `verifier` | 独立验证引用存在性 / 真实性 / 覆盖率 / taxonomy 一致性 |
 | Skill | `paper-scout` | 9 个学术 API 调用手册（10KB） |
 | Skill | `paper-analyzer` | 结构化提取模板 |
 | Skill | `review-writer` | 综述写作模板 + 质量清单 |
+| Skill | `verifier` | `VERIFY` 阶段验证规则 + `verify.json` 输出协议 |
 | Skill | `research-vault` | Obsidian 持久化 + 论文池索引 |
 | Skill | `trendr-watchdog` | 运行监督 + 超时自动续接 + 断点恢复 |
+| Skill | `platform-hotspots` | 9 平台热点抓取（知乎/小红书/X/Reddit/YouTube/GitHub/HN/PH） |
+| Skill | `chrome-cdp-setup` | Chrome 146+ CDP 双实例架构 + Cookie 同步 + 故障排查 |
+| Runtime | `engine/` | v2 engine：state machine + validators + watchdog + adapters |
+| Runtime | `cli.py` | 独立 CLI 入口：`run / resume / status` |
 
 **增强层（Full 模式专属）**
 
@@ -115,13 +123,32 @@ TrendR:
 
 ---
 
+## 兼容平台
+
+TrendR 的 Skills 是纯 Markdown 知识文件，核心 API 调用是标准 HTTP REST——可以在多个 Agent 平台上使用：
+
+| 平台 | 支持程度 | 说明 |
+|------|---------|------|
+| **OpenClaw** | 完整支持 | 原生运行，含多 Agent 编排 + 浏览器自动化 |
+| **Standalone CLI** | v2 engine 可用 | `python cli.py run --topic "..." --depth B`，通过 `engine/adapters/cli.py` + Anthropic API 运行 |
+| **Claude Code** | Skills 可用 | 读 CLAUDE.md 获取工具映射，`web_fetch` → `WebFetch`，子 Agent → `Agent` tool |
+| **Codex** | Skills 可用 | 读 AGENTS.md 获取工具映射，`web_fetch` → `curl`/`fetch`，顺序执行 |
+| **其他 Agent** | Skills 可读 | SKILL.md 是标准 Markdown，API URL 可直接复制使用 |
+
+> **注意**：原生多 Agent 编排（review-lead → paper-scout → paper-analyzer → verifier）和浏览器自动化目前仍以 OpenClaw 支持最完整。Standalone CLI 已支持 v2 engine 的状态机运行；其他平台可以顺序执行各阶段，或用各自的子 Agent 机制模拟。
+
 ## 前置要求
 
 **Basic 模式（最低要求）**
 - macOS 或 Linux
 - Node.js 18+
-- [OpenClaw](https://openclaw.ai) 已安装并完成 `openclaw onboard`
+- [OpenClaw](https://openclaw.ai) 已安装并完成 `openclaw onboard`（或使用 Claude Code / Codex 直接读取 Skills）
 - OpenClaw 支持的任意 LLM（MiniMax M2.5 / Claude / GPT 等）
+
+**CLI 模式（独立运行）**
+- Python 3
+- `ANTHROPIC_API_KEY` 环境变量
+- 可选：`TRENDR_MODEL` 覆盖默认模型 `claude-sonnet-4-20250514`
 
 **Full 模式（额外依赖）**
 - [Obsidian](https://obsidian.md) App + obsidian-cli（`brew install obsidian-cli`）
@@ -174,12 +201,13 @@ obsidian-cli create "test-note" --vault OpenClaw-Vault --content "# Hello from C
 
 安装器会自动注册 Agents 和 Skills，但请确认 `~/.openclaw/openclaw.json` 包含：
 
-**agents.list** — 三个子 Agent：
+**agents.list** — 四个子 Agent：
 
 ```json
 { "id": "paper-scout",    "name": "Paper Scout",    "workspace": "~/.openclaw/workspace" },
 { "id": "paper-analyzer", "name": "Paper Analyzer", "workspace": "~/.openclaw/workspace" },
-{ "id": "review-lead",    "name": "Review Lead",    "workspace": "~/.openclaw/workspace" }
+{ "id": "review-lead",    "name": "Review Lead",    "workspace": "~/.openclaw/workspace" },
+{ "id": "verifier",       "name": "Verifier",       "workspace": "~/.openclaw/workspace" }
 ```
 
 **maxTokens** >= 32768（否则 analyzer 输出会被截断）
@@ -195,6 +223,11 @@ openclaw gateway restart
 ## 使用方法
 
 ```bash
+# 独立 CLI（v2 engine）
+python cli.py run --topic "agentic RAG 2025" --depth B
+python cli.py status ~/research/agentic-rag-2025
+python cli.py resume ~/research/agentic-rag-2025
+
 # 新建文献综述
 "调研 [主题] 的最新进展"
 
@@ -214,6 +247,28 @@ openclaw gateway restart
 # 每日追踪
 "设置每天早上 9 点的 arXiv cs.AI 追踪"
 ```
+
+### 平台热点监控
+
+除了学术论文调研，TrendR 还支持实时抓取 9 个主流平台的热点内容：
+
+```
+你: "帮我看看今天各平台 AI 热点"
+
+TrendR:
+  → Chrome CDP 自动化（带登录态的独立实例）
+  → 知乎热榜 · 知乎科技 · 小红书科技 · X/Twitter
+  → Reddit · YouTube · GitHub Trending · Hacker News · Product Hunt
+  → 交叉平台技术趋势摘要
+```
+
+**前置要求**：需要先启动 OpenClaw Chrome（自动化专用实例）：
+
+```bash
+bash ~/.openclaw/workspace/scripts/start-chrome-cdp.sh
+```
+
+首次使用前，在自动化 Chrome 中登录知乎、X 等需要登录态的平台。之后 cookie 会持久化在 `cdp-automation` profile 中。详见 `chrome-cdp-setup` skill。
 
 ### 交互式入口（/tr）
 
@@ -273,26 +328,30 @@ TrendR 会先给出估时与计划调整：
 │  │       接收 → 分解 → 分派 → 综合                              │  │
 │  └──────┬───────────────┬────────────────┬────────────────────┘  │
 │         ▼               ▼                ▼                       │
-│  ┌────────────┐  ┌────────────┐  ┌─────────────┐               │
-│  │paper-scout │  │paper-      │  │review-lead  │               │
-│  │ 搜索 评分  │  │analyzer    │  │ 编排 综述   │               │
-│  │ 去重       │  │ 精读 提取  │  │ 归档 通知   │               │
-│  └─────┬──────┘  └─────┬──────┘  └──────┬──────┘               │
-│        │               │                │                       │
-│  ┌─────▼───────────────▼────────────────▼──────────────────┐   │
+│  ┌────────────┐  ┌────────────┐  ┌─────────────┐  ┌──────────┐ │
+│  │paper-scout │  │paper-      │  │review-lead  │  │verifier  │ │
+│  │ 搜索 评分  │  │analyzer    │  │ 编排 综述   │  │ 验证 质控 │ │
+│  │ 去重       │  │ 精读 提取  │  │ 状态推进    │  │ verify    │ │
+│  └─────┬──────┘  └─────┬──────┘  └──────┬──────┘  └────┬─────┘ │
+│        │               │                │                │      │
+│  ┌─────▼───────────────▼────────────────▼────────────────▼───┐ │
 │  │            Skills（可执行的 Markdown 知识文件）              │   │
-│  │  paper-scout · paper-analyzer · review-writer · vault   │   │
-│  │  + trendr-watchdog（运行监督与自动续接）                  │   │
-│  └──────────────────────────┬──────────────────────────────┘   │
+│  │  paper-scout · paper-analyzer · review-writer · verifier │  │
+│  │  + trendr-watchdog（运行监督与自动续接）                  │  │
+│  │  + platform-hotspots（9 平台热点） + chrome-cdp-setup    │  │
+│  └──────────────────────────┬──────────────────────────────┘  │
 │                             ▼                                   │
-│  ┌──────────────────────────────────────────────────────────┐   │
-│  │  工具层 (exec / web_fetch / read / write / browser)       │   │
-│  ├──────────────────────────────────────────────────────────┤   │
-│  │  Basic:  9×学术API（免费直连，无额外依赖）                    │   │
-│  │  Full:   + Scrapling（JS渲染） + Nano-pdf（PDF全文）        │   │
-│  │          + Context7（库文档） + Zotero（文献库）             │   │
-│  │  Fallback: Playwright（仅JS缺失/登录态时触发）               │   │
-│  └──────────────────────────────────────────────────────────┘   │
+│  ┌──────────────────────────────────────────────────────────┐  │
+│  │  v2 engine/（state machine / validators / watchdog /     │  │
+│  │  adapters）驱动 INIT → DISCOVERY → ANALYSIS → GAP_CHECK │  │
+│  │  → WRITING → VERIFY → DONE                              │  │
+│  ├──────────────────────────────────────────────────────────┤  │
+│  │  工具层 (exec / web_fetch / read / write / browser)      │  │
+│  │  Basic:  9×学术API（免费直连，无额外依赖）                 │  │
+│  │  Full:   + Scrapling（JS渲染） + Nano-pdf（PDF全文）      │  │
+│  │          + Context7（库文档） + Zotero（文献库）           │  │
+│  │  Fallback: Playwright（仅JS缺失/登录态时触发）             │  │
+│  └──────────────────────────────────────────────────────────┘  │
 └────────────┬────────────────────────────┬───────────────────────┘
              ▼                            ▼
   ┌─────────────────────┐     ┌────────────────────────────┐
@@ -300,6 +359,17 @@ TrendR 会先给出估时与计划调整：
   │  arXiv · S2 · OA    │     │  论文池 / 卡片 / 综述 / 日志  │
   │  PubMed · DBLP ···  │     └────────────────────────────┘
   └─────────────────────┘
+```
+
+### v2 State Machine
+
+```
+INIT → DISCOVERY → ANALYSIS → GAP_CHECK → WRITING → VERIFY → DONE
+                           ↑                          ↓
+                           └──── coverage gaps ───────┘
+
+VERIFY 失败：
+WRITING ← verify.json.pass=false（最多 2 轮修复）
 ```
 
 ### 流水线
@@ -331,7 +401,13 @@ TrendR 会先给出估时与计划调整：
 │  → references.bib                                       │
 └──────────────────────────────┬──────────────────────────┘
                                ▼
-┌─ Phase 5: 持久化 ────────────────────────────────────────┐
+┌─ Phase 5: VERIFY ───────────────────────────────────────┐
+│  verifier 检查 citation / claim / coverage / taxonomy     │
+│  → verify.json                                           │
+│  fail? 回到 Phase 4 修复；pass? 进入 Phase 6               │
+└──────────────────────────────┬──────────────────────────┘
+                               ▼
+┌─ Phase 6: 持久化 ────────────────────────────────────────┐
 │  Basic:  ~/research/<project>/  本地存储                  │
 │  Full:   Obsidian paper-pool.csv（累积去重，跨项目）         │
 │          Obsidian papers/*.md（论文卡片 + wiki-links）      │
@@ -380,6 +456,8 @@ Agent 根据研究领域自动选择 3-5 个最相关的来源。
 ```
 
 论文池 CSV 追踪状态流转：`candidate` → `analyzed` → `cited_in_review`
+
+v2 engine 运行态额外维护：`run_state.json`、`heartbeat.json`、`verify.json`。其中 `run_state.json` 负责状态推进，`heartbeat.json` 负责 watchdog 心跳，`verify.json` 负责 `VERIFY` 阶段结果判定。
 
 ### 防遗忘机制
 

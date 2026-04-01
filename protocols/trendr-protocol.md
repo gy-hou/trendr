@@ -5,6 +5,7 @@
 ## TrendR 执行护栏
 
 - 主脑必须先派发 `review-lead`，由 `review-lead` 统一编排 Scout/Analyzer/Review；禁止 main 直接跑三级流水线。
+- 如果项目目录存在 `run_state.json`（`version: 2`），由状态机驱动，`review-lead` 只执行当前 state 的任务，不自己管理 Phase 推进。
 - 运行目录固定：`~/research/[PROJECT]/`（运行态），不要把中间产物写入 `~/Documents/OpenClaw-Vault/`。
 - 运行态必须维护：`run_status.json`、`progress.md`、`logs/<RUN_ID>.log`、`logs/latest.log`、`logs/watchdog.pid`。
 - paper-scout 固定 `runTimeoutSeconds: 900`；paper-analyzer 固定 `runTimeoutSeconds: 1200`；禁止动态计算超时。
@@ -66,3 +67,18 @@
 - 在用户明确确认（`y/yes/确认/开始/继续`）前，禁止派发任何 subagent（含 `review-lead`）。
 - 在确认前，禁止输出“已启动/已派发/流水线执行中”等执行态文案。
 - 若参数不完整（例如只给主题），必须继续收集参数，不得开跑。
+
+## v2 心跳协议（heartbeat.json）
+
+- v2 运行态额外维护 `~/research/[PROJECT]/heartbeat.json`，作为活跃 agent 的文件心跳。
+- `heartbeat.json` 至少包含四个字段：`agent`、`state`、`updated_at`、`message`。
+- 当前 state 的执行者必须持续刷新 `heartbeat.json`；watchdog 通过 `heartbeat.json` + `run_state.json` 联合判断是否卡死。
+- 若 `heartbeat.json` 长时间不更新，或 `run_state.json.current_state` 与产物进度明显脱节，由 watchdog 写入 `resume_request.json` 请求续接。
+- 排查运行异常时，优先检查 `run_state.json`、`heartbeat.json`、`logs/latest.log` 三个文件是否一致。
+
+## v2 Verify Phase（自动）
+
+- v2 状态机固定包含 `VERIFY` 阶段：`WRITING` 完成后，不直接进入 `DONE`，而是自动调用 `verifier` agent。
+- `verifier` 读取 `review.md`、`references.bib`、`candidates.csv`、`matrix.csv`、`notes/*.md`，输出 `verify.json`。
+- `verify.json.pass = true` 时，状态机进入 `DONE`；`verify.json.pass = false` 时，状态机回退到 `WRITING` 进行修复（最多 2 轮）。
+- `review-lead` 不负责手动决定是否跳过验证，也不负责自行宣布“已完成”；是否完成以 `VERIFY` 结果和状态机转换为准。

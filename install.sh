@@ -29,17 +29,21 @@ echo "  搜论文 → 去重评分 → 精读提取 → 生成综述 → 知识�
 echo ""
 echo -e "${BOLD}TrendR 会安装哪些东西？${NC}"
 echo ""
-echo -e "  ${GREEN}▸ 核心 Agents（3 个，必装）${NC}"
+echo -e "  ${GREEN}▸ 核心 Agents（4 个，必装）${NC}"
 echo -e "    ${DIM}paper-scout     多源学术论文搜索与评分${NC}"
 echo -e "    ${DIM}paper-analyzer  论文精读、结构化笔记、对比矩阵${NC}"
-echo -e "    ${DIM}review-lead     综述撰写、质量审查${NC}"
+echo -e "    ${DIM}review-lead     综述撰写、流程编排${NC}"
+echo -e "    ${DIM}verifier        独立验证引用、claim 与覆盖率${NC}"
 echo ""
-echo -e "  ${GREEN}▸ 核心 Skills（5 个，必装）${NC}"
-echo -e "    ${DIM}paper-scout     9 源学术 API 搜索命令手册${NC}"
-echo -e "    ${DIM}paper-analyzer  结构化提取模板${NC}"
-echo -e "    ${DIM}review-writer   综述撰写模板 + BibTeX 生成${NC}"
-echo -e "    ${DIM}research-vault  Obsidian 持久化协议${NC}"
-echo -e "    ${DIM}trendr-watchdog 运行时监督 + 超时自动续接${NC}"
+echo -e "  ${GREEN}▸ 核心 Skills（8 个，必装）${NC}"
+echo -e "    ${DIM}paper-scout       9 源学术 API 搜索命令手册${NC}"
+echo -e "    ${DIM}paper-analyzer    结构化提取模板${NC}"
+echo -e "    ${DIM}review-writer     综述撰写模板 + BibTeX 生成${NC}"
+echo -e "    ${DIM}verifier         review 质量验证 + verify.json 输出${NC}"
+echo -e "    ${DIM}research-vault    Obsidian 持久化协议${NC}"
+echo -e "    ${DIM}trendr-watchdog   运行时监督 + 超时自动续接${NC}"
+echo -e "    ${DIM}platform-hotspots 9 平台热点抓取（知乎/小红书/X/Reddit/YouTube/GitHub/HN/PH）${NC}"
+echo -e "    ${DIM}chrome-cdp-setup  Chrome 146+ CDP 双实例架构 + Cookie 同步${NC}"
 echo ""
 echo -e "  ${BLUE}▸ 主链搜索栈（Basic 模式即可运行）${NC}"
 echo -e "    ${DIM}9-source APIs   arXiv / Semantic Scholar / OpenAlex / PubMed /${NC}"
@@ -273,7 +277,7 @@ echo ""
 echo -e "${BLUE}${BOLD}[3/8] 安装核心 Agents...${NC}"
 mkdir -p "$WORKSPACE/agents"
 
-for agent in paper-scout paper-analyzer review-lead; do
+for agent in paper-scout paper-analyzer review-lead verifier; do
     TARGET="$WORKSPACE/agents/$agent"
     if [ -d "$TARGET" ]; then
         cp -r "$TARGET" "${TARGET}.bak.$(date +%s)" 2>/dev/null || true
@@ -292,7 +296,7 @@ mkdir -p "$WORKSPACE/skills"
 
 # ── 核心 Skills（Basic + Full 均装）
 echo -e "  ${DIM}── 核心 Skills ──${NC}"
-for skill in paper-scout paper-analyzer review-writer research-vault trendr-watchdog; do
+for skill in paper-scout paper-analyzer review-writer verifier research-vault trendr-watchdog chrome-cdp-setup platform-hotspots; do
     TARGET="$WORKSPACE/skills/$skill"
     if [ -d "$TARGET" ]; then
         cp -r "$TARGET" "${TARGET}.bak.$(date +%s)" 2>/dev/null || true
@@ -300,6 +304,49 @@ for skill in paper-scout paper-analyzer review-writer research-vault trendr-watc
     fi
     cp -r "$SCRIPT_DIR/skills/$skill" "$WORKSPACE/skills/"
     echo -e "  ${GREEN}✅${NC} skills/$skill"
+done
+
+# ── Chrome CDP 脚本（platform-hotspots 浏览器自动化依赖）
+echo ""
+echo -e "  ${DIM}── Chrome CDP 脚本 ──${NC}"
+SCRIPTS_DEST="$WORKSPACE/scripts"
+mkdir -p "$SCRIPTS_DEST"
+for script in start-chrome-cdp.sh stop-chrome-cdp.sh sync-chrome-profile.sh; do
+    if [ -f "$SCRIPT_DIR/scripts/$script" ]; then
+        cp "$SCRIPT_DIR/scripts/$script" "$SCRIPTS_DEST/$script"
+        chmod +x "$SCRIPTS_DEST/$script"
+        echo -e "  ${GREEN}✅${NC} scripts/$script"
+    fi
+done
+
+# ── TrendR v2 Engine
+echo ""
+echo -e "  ${DIM}── TrendR v2 Engine ──${NC}"
+ENGINE_DEST="$WORKSPACE/engine"
+if [ -d "$SCRIPT_DIR/engine" ]; then
+    if [ -d "$ENGINE_DEST" ]; then
+        cp -r "$ENGINE_DEST" "${ENGINE_DEST}.bak.$(date +%s)" 2>/dev/null || true
+        echo -e "  ${YELLOW}↺${NC}  engine/（备份旧版 → 覆盖）"
+    fi
+    cp -r "$SCRIPT_DIR/engine" "$WORKSPACE/"
+    echo -e "  ${GREEN}✅${NC} engine/"
+else
+    echo -e "  ${YELLOW}⚠️${NC}  缺少目录: $SCRIPT_DIR/engine（跳过）"
+fi
+
+for artifact in cli.py pyproject.toml; do
+    SOURCE="$SCRIPT_DIR/$artifact"
+    TARGET="$WORKSPACE/$artifact"
+    if [ -f "$SOURCE" ]; then
+        if [ -f "$TARGET" ]; then
+            cp "$TARGET" "${TARGET}.bak.$(date +%s)" 2>/dev/null || true
+            echo -e "  ${YELLOW}↺${NC}  $artifact（备份旧版 → 覆盖）"
+        fi
+        cp "$SOURCE" "$TARGET"
+        echo -e "  ${GREEN}✅${NC} $artifact"
+    else
+        echo -e "  ${YELLOW}⚠️${NC}  缺少文件: $SOURCE（跳过）"
+    fi
 done
 
 # ── 轻量依赖（两种模式均尝试）
@@ -485,7 +532,7 @@ else:
 PYEOF
 }
 
-BASE_SKILLS="paper-scout paper-analyzer review-writer research-vault trendr-watchdog arxiv-watcher summarize agent-browser"
+BASE_SKILLS="paper-scout paper-analyzer review-writer verifier research-vault trendr-watchdog chrome-cdp-setup platform-hotspots arxiv-watcher summarize agent-browser"
 for sk in $BASE_SKILLS; do _ensure_skill "$sk"; done
 _ensure_agent_tool "review-lead" "sessions_yield"
 
@@ -742,8 +789,9 @@ echo -e "${CYAN}${BOLD}║              TrendR v${VERSION} 安装完成！      
 echo -e "${CYAN}${BOLD}╚══════════════════════════════════════════════════════════════╝${NC}"
 echo ""
 echo -e "  ${BOLD}模式:${NC} $([ "$INSTALL_MODE" = "full" ] && echo "${CYAN}Full${NC}" || echo "${GREEN}Basic${NC}")"
-echo -e "  ${BOLD}Agents:${NC}  paper-scout · paper-analyzer · review-lead"
-echo -e "  ${BOLD}Skills:${NC}  paper-scout (9源) · paper-analyzer · review-writer · research-vault · trendr-watchdog"
+echo -e "  ${BOLD}Agents:${NC}  paper-scout · paper-analyzer · review-lead · verifier"
+echo -e "  ${BOLD}Skills:${NC}  paper-scout (9源) · paper-analyzer · review-writer · verifier · research-vault · trendr-watchdog · platform-hotspots · chrome-cdp-setup"
+echo -e "  ${BOLD}Engine:${NC}  engine/ · cli.py · pyproject.toml"
 if [ "$INSTALL_MODE" = "full" ]; then
     EXTRAS="nano-pdf · context7"
     [ "$SCRAPLING_OK" = "true" ] && EXTRAS="$EXTRAS · scrapling"

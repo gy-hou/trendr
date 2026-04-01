@@ -47,44 +47,50 @@ web_fetch: { url: "https://api.openalex.org/works/doi:[DOI]?select=id,title,auth
 ## 笔记模板
 
 对每篇论文，写入 `~/research/[PROJECT]/notes/[PAPER_ID].md`：
+笔记必须以 YAML frontmatter 开头，至少包含 `paper_id`、`title`、`relevance_score`。
 
 ```markdown
-# [论文标题]
+---
+paper_id: "[arXiv ID 或 DOI]"
+title: "[论文标题]"
+relevance_score: 5
+year: [YYYY]
+source: "[arxiv | semantic_scholar | openalex | pubmed | crossref | dblp | europe_pmc | biorxiv | paperswithcode]"
+authors: "[Author1, Author2, ...]"
+venue: "[Conference/Journal 或 arXiv preprint]"
+citation_count: [number]
+retrieval_status: "[FULL_TEXT | ABSTRACT_ONLY | ACCESS_FAILED]"
+---
 
-## 元数据
-- **Paper ID**: [arXiv ID 或 DOI]
-- **作者**: [Author1, Author2, ...]
-- **年份**: [YYYY]
-- **发表场所**: [Conference/Journal 或 "arXiv preprint"]
-- **引用数**: [number]
-- **获取状态**: [FULL_TEXT | ABSTRACT_ONLY | ACCESS_FAILED]
+## Summary
+[1-3 句话：这篇论文的核心问题、方法与结论概览]
 
-## 研究问题
+## Research Question
 [1-3 句话：这篇论文要解决什么问题？]
 
-## 方法
+## Methodology
 [3-5 句话：提出了什么方法/模型/框架？]
 
-## 关键结果
+## Key Findings
 | 指标 | 数据集 | 数值 | 对比基线 |
 |------|--------|------|----------|
 | [metric] | [dataset] | [value] | [+/- vs baseline] |
 
-## 主要贡献
+## Contributions
 1. [贡献 1]
 2. [贡献 2]
 3. [贡献 3，如有]
 
-## 局限性
+## Limitations
 - [局限 1]
 - [局限 2]
 
-## 关键引用（该论文引用的重要工作）
+## Key Citations
 - [论文标题] ([年份])
 - [论文标题] ([年份])
 - [论文标题] ([年份])
 
-## 标签
+## Tags
 [逗号分隔，如: multi-agent, retrieval, LLM, benchmark]
 
 ## BibTeX
@@ -101,9 +107,9 @@ web_fetch: { url: "https://api.openalex.org/works/doi:[DOI]?select=id,title,auth
 
 ### 字段规则
 
-- 每个字段必须填写，信息不可用时写 **N/A**，绝不留空
+- frontmatter 和各章节都必须填写，信息不可用时写 **N/A**，绝不留空
 - "关键结果"表至少 1 行，无定量结果时写 `N/A | N/A | N/A | N/A`
-- "获取状态"必填——告诉 review-lead 哪些论文需要找替代途径
+- `retrieval_status` 必填——告诉 review-lead 哪些论文需要找替代途径
 - 永远不要编造论文中没有的数据
 
 ## 对比矩阵格式
@@ -111,16 +117,18 @@ web_fetch: { url: "https://api.openalex.org/works/doi:[DOI]?select=id,title,auth
 所有论文分析完后，写入 `~/research/[PROJECT]/matrix.csv`：
 
 ```csv
-paper_id,title,year,method_category,dataset,key_metric,key_result,venue,limitations_summary,tags
+paper_id,title,year,method,dataset,metric,result,category,strengths,limitations
 ```
 
 字段说明：
-- `method_category`: 方法大类（如 transformer; diffusion; RL; retrieval; hybrid）
-- `key_metric`: 主要评估指标名
-- `key_result`: 主要结果值
-- `venue`: 发表场所
-- `limitations_summary`: 一句话概括局限（不用逗号，用分号）
-- `tags`: 分号分隔的标签
+- `paper_id`、`method`、`dataset`、`category` 是 engine validator 的必填列，列名必须精确匹配
+- `method`: 核心方法或框架名（如 MADDPG; survey; graph MARL）
+- `dataset`: 主要实验数据集或场景，无则写 `N/A`
+- `metric`: 主要评估指标名，无则写 `N/A`
+- `result`: 主要结果值或结论，无则写 `N/A`
+- `category`: 主题分类（如 survey; theory; robotics; LLM-agents; mean-field）
+- `strengths`: 一句话概括该论文最强贡献（不用逗号，用分号）
+- `limitations`: 一句话概括局限（不用逗号，用分号）
 
 ## 批量处理规则
 

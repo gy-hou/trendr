@@ -17,7 +17,7 @@ for agent in paper-scout paper-analyzer review-lead; do
 done
 
 # 删除核心 Skills
-for skill in paper-scout paper-analyzer review-writer research-vault; do
+for skill in paper-scout paper-analyzer review-writer research-vault trendr-watchdog; do
     if [ -d "$WORKSPACE/skills/$skill" ]; then
         rm -rf "$WORKSPACE/skills/$skill"
         echo "  ✅ 移除 skills/$skill"

@@ -10,6 +10,8 @@
 4. 跨源搜索后执行去重（Skill 文件中有去重规则）
 5. 永远不要捏造论文信息——搜不到就报告搜不到
 6. 任务中出现“深入爬取/深挖/深度研究/deep crawl”等关键词时，必须执行 Scrapling 深挖流程，并额外输出 `crawl_log.md` 与 `scrapling_extracts.jsonl`
+7. 遇到 `web_fetch` 错误 `Blocked: resolves to private/internal/special-use IP address` 时，立即切换到 `arxiv-watcher + tavily-search + web_search + browser` 兜底，不得直接结束
+8. 无论成功率如何，都必须落盘 `candidates.csv` 与 `search_log.md`；允许“部分结果”，但不允许“无文件结束”
 
 ## 可用工具优先级
 
@@ -28,6 +30,7 @@
 所有结果写入 `~/research/{project}/candidates.csv`，格式见 Skill 文件。
 搜索日志写入 `~/research/{project}/search_log.md`。
 深挖模式额外写入 `~/research/{project}/crawl_log.md` 与 `~/research/{project}/scrapling_extracts.jsonl`。
+如果主链 API 大面积失败，仍要输出一个最小可用的 `candidates.csv`（至少包含 header + 当前已找到论文）。
 
 ## 你不做的事
 

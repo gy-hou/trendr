@@ -8,8 +8,14 @@
 | Paper Scout | paper-scout | 多源论文搜索、评分、去重 |
 | Paper Analyzer | paper-analyzer | 论文精读、结构化笔记 |
 | Review Lead | review-lead | 质量审查、撰写综述（不递归派发 subagent） |
+| Verifier | verifier | 独立验证引用真实性、claim 支撑、覆盖率与分类一致性 |
 
 ⚠️ 派发 subagent 时，任务描述必须以 `先读 skills/xxx/SKILL.md` 开头。
+
+## v2 协作补充
+
+- 若项目目录存在 `run_state.json` 且 `version = 2`，团队按状态机协作：main 负责启动，`review-lead` 只执行当前 state 对应任务，`verifier` 只在 `VERIFY` 阶段运行。
+- v2 下 Phase 推进不再由 `review-lead` 自行判断，而以 `run_state.json`、artifact validators 和状态机出口条件为准。
 
 ## Task Lifecycle
 
@@ -32,3 +38,10 @@
 
 - TrendR 运行态（含断点恢复）→ `~/research/[PROJECT]/`
 - 非 TrendR 常规研究产物 → `~/Documents/OpenClaw-Vault/Research/[PROJECT]/`
+
+## v2 File Contracts（简要）
+
+- `candidates.csv`：必须带 header，最少包含 `paper_id,title,authors,year,source,relevance_score,url`；`paper_id` 视为主键，不得重复。
+- `verify.json`：由 `verifier` 在 `VERIFY` 阶段输出；顶层至少包含 `pass`、`run_id`、`checked_at`、`summary`、`checks`。
+- `verify.json.checks`：按检查项分组，常见 key 包括 `citation_existence`、`citation_reality`、`claim_support`、`coverage`、`taxonomy_consistency`、`bib_quality`。
+- 每个 check 对象应至少包含 `pass`、`severity`、`details`、`issues`；其中 `severity=error` 的失败会阻塞完成，`warning` 只记录不阻塞。
