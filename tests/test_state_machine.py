@@ -465,19 +465,14 @@ class ResearchStateMachineTestCase(unittest.TestCase):
         self.assertEqual(next_state, "DONE")
         self.assertEqual(sm.state["fix_rounds"], DEFAULT_MAX_FIX_ROUNDS)
 
-    def test_check_budget_returns_force_advance_target(self) -> None:
+    def test_update_budget_flag_enables_soft_budget_mode(self) -> None:
         sm = self.initialize_machine("budget-map", time_budget_min=0)
-        sm.state["current_state"] = "DISCOVERY"
-        self.assertEqual(sm._check_budget(), "ANALYSIS")
-
         sm.state["current_state"] = "ANALYSIS"
-        self.assertEqual(sm._check_budget(), "GAP_CHECK")
 
-        sm.state["current_state"] = "GAP_CHECK"
-        self.assertEqual(sm._check_budget(), "WRITING")
+        sm._update_budget_flag()
 
-        sm.state["current_state"] = "WRITING"
-        self.assertIsNone(sm._check_budget())
+        self.assertTrue(sm.state.get("budget_exceeded"))
+        self.assertEqual(sm.state["current_state"], "ANALYSIS")
 
     def test_log_transition_failure_records_validator_details(self) -> None:
         sm = self.initialize_machine("transition-failure")
@@ -500,7 +495,7 @@ class ResearchStateMachineTestCase(unittest.TestCase):
         self.assertIn("Validator failed: Missing columns", log_text)
         self.assertIn("Validator failed: Only 0/1 notes have valid frontmatter", log_text)
 
-    def test_run_force_advances_when_budget_is_exceeded(self) -> None:
+    def test_run_marks_budget_exceeded_without_hard_force_advance(self) -> None:
         sm = self.initialize_machine("budget-run", time_budget_min=0)
         sm.transition("ANALYSIS")
         original_execute_current = sm.execute_current
@@ -511,7 +506,7 @@ class ResearchStateMachineTestCase(unittest.TestCase):
             return True
 
         def fake_check_transition() -> str | None:
-            if sm.state["current_state"] == "GAP_CHECK":
+            if sm.state["current_state"] == "ANALYSIS":
                 return "DONE"
             return None
 
@@ -523,11 +518,54 @@ class ResearchStateMachineTestCase(unittest.TestCase):
         self.assertEqual(result["status"], "completed")
         self.assertTrue(result["budget_exceeded"])
         self.assertEqual(result["history"][1]["state"], "ANALYSIS")
-        self.assertEqual(result["history"][1]["result"], "budget_exceeded")
+        self.assertEqual(result["history"][1]["result"], "ok")
         self.assertEqual(
             [entry["state"] for entry in result["history"]],
-            ["INIT", "ANALYSIS", "GAP_CHECK", "DONE"],
+            ["INIT", "ANALYSIS", "DONE"],
         )
+
+    def test_exec_analysis_writes_minimal_fallback_artifacts_when_agent_fails(self) -> None:
+        sm = self.initialize_machine("analysis-fallback")
+        sm.state["current_state"] = "ANALYSIS"
+        self.write_candidates(
+            sm,
+            [
+                {
+                    "paper_id": "paper1",
+                    "title": "Paper One",
+                    "authors": "Alice",
+                    "year": "2024",
+                    "source": "arxiv",
+                    "relevance_score": "5",
+                    "url": "https://example.com/p1",
+                },
+                {
+                    "paper_id": "paper2",
+                    "title": "Paper Two",
+                    "authors": "Bob",
+                    "year": "2023",
+                    "source": "openalex",
+                    "relevance_score": "4",
+                    "url": "https://example.com/p2",
+                },
+            ],
+        )
+
+        original_await = self.adapter.await_agent
+
+        def fake_await_agent(handle: str, poll_sec: int = 10) -> dict:
+            return {"status": "failed", "output": "", "error": "simulated analyzer failure"}
+
+        self.adapter.await_agent = fake_await_agent  # type: ignore[method-assign]
+        try:
+            ok = sm._exec_analysis()
+        finally:
+            self.adapter.await_agent = original_await  # type: ignore[method-assign]
+
+        self.assertTrue(ok)
+        self.assertTrue(sm.matrix_path.exists())
+        self.assertTrue(sm.validator.validate_matrix_csv(sm.matrix_path, sm.candidates_path).ok)
+        self.assertTrue(sm.validator.validate_notes_dir(sm.notes_dir, min_count=1).ok)
 
     def test_run_retries_discovery_until_transition_condition_is_met(self) -> None:
         sm = self.initialize_machine("run-discovery-retry")

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Chrome CDP Setup"
+  short_description: "Configure and troubleshoot Chrome CDP automation profiles."
+  default_prompt: "Use $chrome-cdp-setup for TrendR workflows."

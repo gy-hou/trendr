@@ -1,0 +1,4 @@
+interface:
+  display_name: "Paper Analyzer"
+  short_description: "Extract structured notes and matrix rows from papers."
+  default_prompt: "Use $paper-analyzer for TrendR workflows."

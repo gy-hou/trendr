@@ -12,6 +12,19 @@
 
 如果项目目录中没有 `run_state.json` 或 version != 2，使用下面的 v1 规则。
 
+## Runtime-Aware Orchestration
+
+先识别 runtime：`TRENDR_PLATFORM` > `OPENCLAW_SESSION_ID` > `CODEX_*` > `CLAUDE_CODE_*` > `cli`。
+canonical runtime：`openclaw`、`codex`、`claude-code`、`cli`；别名 `claudecode -> claude-code`。
+
+- `openclaw`:
+  - 继续使用 `sessions_spawn` + `sessions_yield` 派发/等待 subagent
+  - watchdog 可用 `supervisor.py` 进行 session 注入
+- `codex` / `claude-code` / `cli`:
+  - 默认顺序执行（稳定优先）
+  - 仅在 DISCOVERY/ANALYSIS 且任务边界清晰时允许并行子代理
+  - watchdog 走 `engine/watchdog.py` + `resume_request.json` 文件恢复，不做会话注入
+
 ## 行为规则
 
 1. **每次任务开始前**，先执行 `read skills/review-writer/SKILL.md` 与 `read skills/trendr-watchdog/SKILL.md`
@@ -44,8 +57,9 @@
   - `progress.md`：`[----------] 0% | Phase 0/5 | 初始化`
   - `logs/{RUN_ID}.log`：写入启动参数、目标规模、时间预算（若有）
 - 每次刷新日志后，同步覆盖 `logs/latest.log`
-- 启动 supervisor（后台常驻）：
-  - `exec: PROJECT="[project]" && RUN_ID="[RUN_ID]" && SESSION_ID="[OWNER_SESSION_ID]" && nohup python3 ~/.openclaw/workspace/skills/trendr-watchdog/supervisor.py --project "$PROJECT" --run-id "$RUN_ID" --session-id "$SESSION_ID" --poll-sec 60 --idle-timeout-sec 600 --phase-mismatch-grace-sec 180 --artifact-complete-grace-sec 1800 --resume-cooldown-sec 300 --heartbeat-sec 300 --max-resume 12 >> ~/research/"$PROJECT"/logs/watchdog.out 2>&1 & echo $! > ~/research/"$PROJECT"/logs/watchdog.pid`
+- 按 runtime 启动 watchdog：
+  - `openclaw`：`exec: PROJECT="[project]" && RUN_ID="[RUN_ID]" && SESSION_ID="[OWNER_SESSION_ID]" && nohup python3 ~/.openclaw/workspace/skills/trendr-watchdog/supervisor.py --project "$PROJECT" --run-id "$RUN_ID" --session-id "$SESSION_ID" --poll-sec 60 --idle-timeout-sec 600 --phase-mismatch-grace-sec 180 --artifact-complete-grace-sec 1800 --resume-cooldown-sec 300 --heartbeat-sec 300 --max-resume 12 >> ~/research/"$PROJECT"/logs/watchdog.out 2>&1 & echo $! > ~/research/"$PROJECT"/logs/watchdog.pid`
+  - `codex` / `claude-code` / `cli`：`exec: PROJECT="[project]" && nohup python3 engine/watchdog.py ~/research/"$PROJECT" >> ~/research/"$PROJECT"/logs/watchdog.out 2>&1 & echo $! > ~/research/"$PROJECT"/logs/watchdog.pid`
 
 ### 0.5 参数化计划（若任务给出约束）
 - `/tr` 默认进入快速模式（兼容 `/trendr`）；若用户输入 `/b`，切换到精确模式
@@ -132,7 +146,7 @@
 ### Phase 5: Report
 - 进入 Phase 5 时刷新进度到 `97%-100%`
 - 向宇哥汇报完成情况（必须包含各 Phase 文件清单；如果有未完成 Phase，明确写“进行中/失败原因”）
-- 收尾前先停 watchdog：
+- 收尾前先停 watchdog（所有 runtime 共用）：
   - `exec: PROJECT="[project]" && PID_FILE=~/research/"$PROJECT"/logs/watchdog.pid && if [ -f "$PID_FILE" ]; then kill "$(cat "$PID_FILE")" 2>/dev/null || true; fi`
 - 收尾时必须将 `run_status.json` 标记为 `status=completed|failed`，写入 `finished_at` 与 `duration_sec`
 

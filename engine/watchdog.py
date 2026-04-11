@@ -65,9 +65,14 @@ def _parse_iso(s: str) -> datetime:
         return datetime.strptime(s[:19], "%Y-%m-%dT%H:%M:%S").replace(tzinfo=timezone.utc)
 
 
-def _seconds_since(iso_str: str) -> float:
-    """Seconds elapsed since the given ISO timestamp."""
-    then = _parse_iso(iso_str)
+def _seconds_since(iso_str: str) -> Optional[float]:
+    """Seconds elapsed since the given ISO timestamp, or None if invalid."""
+    if not iso_str:
+        return None
+    try:
+        then = _parse_iso(iso_str)
+    except Exception:
+        return None
     now = datetime.now(timezone.utc)
     return (now - then).total_seconds()
 
@@ -134,6 +139,8 @@ class Watchdog:
             # No heartbeat file — could be early startup, check run_state age
             if run_state and "heartbeat_at" in run_state:
                 age = _seconds_since(run_state["heartbeat_at"])
+                if age is None:
+                    return True
                 return age > self.config.idle_timeout_sec
             return False  # Too early to tell
 
@@ -142,6 +149,8 @@ class Watchdog:
             return True
 
         age = _seconds_since(updated_at)
+        if age is None:
+            return True
         return age > self.config.idle_timeout_sec
 
     def is_pipeline_terminal(self, run_state: Optional[dict]) -> bool:
@@ -194,7 +203,13 @@ class Watchdog:
 
         updated_at = heartbeat.get("updated_at", "unknown")
         if updated_at != "unknown":
-            age = int(_seconds_since(updated_at))
+            age_seconds = _seconds_since(updated_at)
+            if age_seconds is None:
+                return (
+                    "Heartbeat timestamp is invalid "
+                    f"({updated_at}); treating as stalled"
+                )
+            age = int(age_seconds)
             agent = heartbeat.get("agent", "unknown")
             state = heartbeat.get("state", "unknown")
             return (
@@ -227,7 +242,7 @@ class Watchdog:
         now = _now_iso()
         if self.state.last_log_at:
             elapsed = _seconds_since(self.state.last_log_at)
-            if elapsed < self.config.heartbeat_log_sec:
+            if elapsed is not None and elapsed < self.config.heartbeat_log_sec:
                 return
 
         run_state = self.read_run_state()

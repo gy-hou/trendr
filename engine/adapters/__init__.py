@@ -2,5 +2,6 @@
 
 from .base import PlatformAdapter
 from .cli import CLIAdapter
+from .openclaw import OpenClawAdapter
 
-__all__ = ["PlatformAdapter", "CLIAdapter"]
+__all__ = ["PlatformAdapter", "CLIAdapter", "OpenClawAdapter"]

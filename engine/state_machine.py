@@ -8,6 +8,8 @@ See ARCHITECTURE.md §1 and §3 for the full specification.
 
 import json
 import logging
+import csv
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
@@ -54,6 +56,8 @@ STATE_TIMEOUTS = {
     "VERIFY": 600,
     "DONE": 60,
 }
+
+DEFAULT_FALLBACK_ANALYSIS_ROWS = 20
 
 
 def _now_iso() -> str:
@@ -476,6 +480,12 @@ class ResearchStateMachine:
 
         if score >= DEFAULT_COVERAGE_THRESHOLD:
             return "WRITING"
+        elif self.state.get("budget_exceeded"):
+            self._log(
+                f"Coverage {score:.2f} below threshold but budget is exceeded. "
+                "Advancing to WRITING in soft-budget mode."
+            )
+            return "WRITING"
         elif discovery_rounds >= max_rounds:
             self._log(f"Coverage {score:.2f} below threshold but max rounds reached. Advancing.")
             return "WRITING"
@@ -613,7 +623,25 @@ class ResearchStateMachine:
         result = self.adapter.await_agent(handle)
 
         self._update_progress("ANALYSIS", f"Analyzer returned: {result.get('status', '?')}", 0.9)
-        return result.get("status") == "completed"
+        analyzer_completed = result.get("status") == "completed"
+
+        matrix_result = self.validator.validate_matrix_csv(self.matrix_path, self.candidates_path)
+        notes_result = self.validator.validate_notes_dir(self.notes_dir, min_count=1)
+        artifacts_ready = bool(matrix_result and notes_result)
+
+        if analyzer_completed and artifacts_ready:
+            return True
+
+        fallback_reason = (
+            "analyzer did not complete"
+            if not analyzer_completed
+            else "analysis artifacts missing or invalid"
+        )
+        self._log(
+            "ANALYSIS fallback triggered: "
+            f"{fallback_reason}. Generating minimal notes/matrix."
+        )
+        return self._write_minimal_analysis_artifacts(reason=fallback_reason)
 
     def _exec_gap_check(self) -> bool:
         """GAP_CHECK: orchestrator reads all artifacts and produces gap_report.md.
@@ -691,7 +719,10 @@ class ResearchStateMachine:
         result = self.adapter.await_agent(handle)
 
         self._update_progress("VERIFY", f"Verify: {result.get('status', '?')}", 0.9)
-        return result.get("status") == "completed"
+        if result.get("status") != "completed":
+            return False
+
+        return self._write_deterministic_verify(run_id=run_id)
 
     def _exec_done(self) -> bool:
         """DONE: finalize the run."""
@@ -745,21 +776,23 @@ class ResearchStateMachine:
         elapsed_sec = max(0, int((datetime.now(timezone.utc) - started_dt).total_seconds()))
         return elapsed_sec, budget_sec
 
-    def _check_budget(self) -> Optional[str]:
-        """Return a force-advance target state when the time budget is exceeded."""
+    def _update_budget_flag(self) -> None:
+        """Mark budget_exceeded once without hard force-advancing states."""
         current = self.state["current_state"]
         if current in ("WRITING", "VERIFY", "DONE"):
-            return None
+            return
 
         elapsed_sec, budget_sec = self._budget_status()
         if elapsed_sec < budget_sec:
-            return None
+            return
 
-        return {
-            "DISCOVERY": "ANALYSIS",
-            "ANALYSIS": "GAP_CHECK",
-            "GAP_CHECK": "WRITING",
-        }.get(current)
+        if not self.state.get("budget_exceeded"):
+            self.state["budget_exceeded"] = True
+            self.save_state()
+            self._log(
+                f"Budget exceeded ({elapsed_sec}s > {budget_sec}s). "
+                "Switching to soft-budget mode (no hard state skipping)."
+            )
 
     def _transition_validation_results(self, state: str) -> list[ValidationResult]:
         """Collect the validators relevant to a state's exit conditions."""
@@ -864,26 +897,7 @@ class ResearchStateMachine:
 
         while self.state["current_state"] != "DONE" and self.state["status"] == "running":
             current = self.state["current_state"]
-
-            budget_next = self._check_budget()
-            if budget_next:
-                elapsed_sec, budget_sec = self._budget_status()
-                self.state["budget_exceeded"] = True
-                self._log(
-                    f"Budget exceeded ({elapsed_sec}s > {budget_sec}s). "
-                    f"Force-advancing from {current} to {budget_next}."
-                )
-                metrics = self._collect_metrics(current)
-                self.transition(budget_next, result="budget_exceeded", metrics=metrics)
-
-                if budget_next == "DONE":
-                    self.execute_current()
-                    continue
-
-                if current in ("DISCOVERY", "GAP_CHECK"):
-                    continue
-
-                current = self.state["current_state"]
+            self._update_budget_flag()
 
             # Execute current state
             success = self.execute_current()
@@ -919,6 +933,179 @@ class ResearchStateMachine:
                 break
 
         return self.state
+
+    def _select_fallback_analysis_rows(self) -> list[dict]:
+        """Select candidate rows for minimal analysis fallback outputs."""
+        if not self.candidates_path.exists():
+            return []
+
+        try:
+            text = self.candidates_path.read_text(encoding="utf-8")
+        except Exception:
+            return []
+
+        rows = list(csv.DictReader(text.splitlines()))
+        if not rows:
+            return []
+
+        scored_rows: list[tuple[float, dict]] = []
+        for row in rows:
+            paper_id = (row.get("paper_id") or "").strip()
+            if not paper_id:
+                continue
+            try:
+                score = float((row.get("relevance_score") or "0").strip() or 0)
+            except ValueError:
+                score = 0.0
+            scored_rows.append((score, row))
+
+        if not scored_rows:
+            return []
+
+        high_rel = [item for item in scored_rows if item[0] >= 4.0]
+        selected = high_rel if high_rel else scored_rows
+        selected.sort(key=lambda item: item[0], reverse=True)
+        return [row for _, row in selected[:DEFAULT_FALLBACK_ANALYSIS_ROWS]]
+
+    def _safe_note_stem(self, paper_id: str) -> str:
+        stem = re.sub(r"[^A-Za-z0-9._-]+", "_", paper_id).strip("._-")
+        return stem or "paper"
+
+    def _write_minimal_analysis_artifacts(self, reason: str) -> bool:
+        """Create minimal valid notes/matrix when analyzer output is missing."""
+        rows = self._select_fallback_analysis_rows()
+        if not rows:
+            self._log(
+                "ANALYSIS fallback failed: candidates.csv unavailable or empty; "
+                "cannot synthesize minimal notes/matrix."
+            )
+            return False
+
+        self.notes_dir.mkdir(parents=True, exist_ok=True)
+        created_notes = 0
+
+        for row in rows:
+            paper_id = (row.get("paper_id") or "").strip() or "unknown"
+            title = (row.get("title") or "").strip() or "N/A"
+            authors = (row.get("authors") or "").strip() or "N/A"
+            year = (row.get("year") or "").strip() or "N/A"
+            source = (row.get("source") or "").strip() or "N/A"
+            score_raw = (row.get("relevance_score") or "0").strip() or "0"
+            safe_title = title.replace('"', "'")
+            safe_authors = authors.replace('"', "'")
+            note_path = self.notes_dir / f"fallback_{self._safe_note_stem(paper_id)}.md"
+
+            if note_path.exists():
+                continue
+
+            note_content = (
+                "---\n"
+                f"paper_id: \"{paper_id}\"\n"
+                f"title: \"{safe_title}\"\n"
+                f"relevance_score: {score_raw}\n"
+                f"year: {year}\n"
+                f"source: \"{source}\"\n"
+                f"authors: \"{safe_authors}\"\n"
+                "venue: \"N/A\"\n"
+                "citation_count: 0\n"
+                "retrieval_status: \"ACCESS_FAILED\"\n"
+                "---\n\n"
+                "## Summary\n"
+                f"Fallback note generated by state machine because ANALYSIS was incomplete ({reason}).\n\n"
+                "## Research Question\n"
+                "N/A\n\n"
+                "## Methodology\n"
+                "N/A\n\n"
+                "## Key Findings\n"
+                "| Metric | Dataset | Value | Baseline |\n"
+                "|--------|---------|-------|----------|\n"
+                "| N/A | N/A | N/A | N/A |\n\n"
+                "## Contributions\n"
+                "1. N/A\n\n"
+                "## Limitations\n"
+                "- Full-text analysis unavailable in fallback mode.\n\n"
+                "## Key Citations\n"
+                "- N/A\n\n"
+                "## Tags\n"
+                "fallback-analysis\n\n"
+                "## BibTeX\n"
+                "```bibtex\n"
+                f"@misc{{{paper_id},\n"
+                f"  title={{{title}}},\n"
+                f"  author={{{authors}}},\n"
+                f"  year={{{year}}}\n"
+                "}\n"
+                "```\n"
+            )
+            note_path.write_text(note_content, encoding="utf-8")
+            created_notes += 1
+
+        matrix_rows = []
+        for row in rows:
+            matrix_rows.append(
+                {
+                    "paper_id": (row.get("paper_id") or "").strip() or "unknown",
+                    "title": (row.get("title") or "").strip() or "N/A",
+                    "year": (row.get("year") or "").strip() or "N/A",
+                    "method": "N/A",
+                    "dataset": "N/A",
+                    "metric": "N/A",
+                    "result": "N/A",
+                    "category": "fallback",
+                    "strengths": "N/A",
+                    "limitations": "Generated by fallback; full analysis missing",
+                }
+            )
+
+        fieldnames = [
+            "paper_id", "title", "year", "method", "dataset",
+            "metric", "result", "category", "strengths", "limitations",
+        ]
+        with open(self.matrix_path, "w", encoding="utf-8", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows(matrix_rows)
+
+        matrix_result = self.validator.validate_matrix_csv(self.matrix_path, self.candidates_path)
+        notes_result = self.validator.validate_notes_dir(self.notes_dir, min_count=1)
+        ok = bool(matrix_result and notes_result)
+
+        self._log(
+            "ANALYSIS fallback artifacts written: "
+            f"notes_created={created_notes}, matrix_rows={len(matrix_rows)}, valid={ok}"
+        )
+        if not ok:
+            if not matrix_result:
+                self._log(f"ANALYSIS fallback matrix validation failed: {matrix_result.message}")
+            if not notes_result:
+                self._log(f"ANALYSIS fallback notes validation failed: {notes_result.message}")
+        return ok
+
+    def _write_deterministic_verify(self, run_id: str) -> bool:
+        """Generate verify.json via local deterministic checks."""
+        try:
+            from .verifier import run_all_checks
+        except Exception as e:
+            self._log(f"Failed to import local verifier: {e}")
+            return False
+
+        verify_payload = run_all_checks(
+            review_path=self.review_path,
+            bib_path=self.references_path,
+            candidates_path=self.candidates_path,
+            notes_dir=self.notes_dir,
+            run_id=run_id,
+            api_check=False,
+        )
+        self.verify_path.write_text(
+            json.dumps(verify_payload, indent=2, ensure_ascii=False),
+            encoding="utf-8",
+        )
+        self._log(
+            "[local-verifier] verify.json generated: "
+            f"pass={verify_payload.get('pass')} summary={verify_payload.get('summary')}"
+        )
+        return True
 
     def _collect_metrics(self, state: str) -> Optional[dict]:
         """Collect metrics for the completed state's history entry."""

@@ -91,12 +91,18 @@ TrendR Skills are pure Markdown files; core API calls are standard HTTP REST —
 | Platform | Support | Notes |
 |----------|---------|-------|
 | **OpenClaw** | Full | Native multi-agent orchestration + browser automation |
-| **Standalone CLI** | v2 engine | `python cli.py run --topic "..." --depth B` via `engine/adapters/cli.py` + Anthropic API |
-| **Claude Code** | Skills readable | via `CLAUDE.md` tool mapping: `web_fetch` → `WebFetch`, subagent → `Agent` tool |
-| **Codex** | Skills readable | via `AGENTS.md` tool mapping: `web_fetch` → `curl`/`fetch`, sequential execution |
+| **Standalone CLI** | v2 engine | `python cli.py run --topic "..." --platform cli` via `engine/adapters/cli.py` + OpenAI/Anthropic auto-provider |
+| **Claude Code** | Skills + CLI | `python cli.py run --topic "..." --platform claude-code`, or use CLAUDE.md tool mapping |
+| **Codex** | Skills + CLI | `python cli.py run --topic "..." --platform codex`, or use AGENTS.md tool mapping |
 | **Other agents** | Skills readable | `SKILL.md` is standard Markdown; API URLs are directly copyable |
 
-> Native multi-agent orchestration and browser automation are best supported on OpenClaw. The standalone CLI supports v2 engine state-machine runs; other platforms can execute stages sequentially.
+> Native multi-agent orchestration and browser automation are best supported on OpenClaw. Codex / Claude Code / CLI default to stability-first sequential execution, with limited parallelism only for DISCOVERY and ANALYSIS.
+
+Unified runtime contract:
+- canonical runtime: `openclaw`, `codex`, `claude-code`, `cli`
+- alias: `claudecode -> claude-code`
+- detection priority: CLI `--platform` > `TRENDR_PLATFORM` > `OPENCLAW_SESSION_ID` > `CODEX_*` > `CLAUDE_CODE_*` > `cli`
+- each skill executes only the matching runtime block; non-target blocks are marked `dormant` and skipped
 
 ---
 
@@ -110,8 +116,13 @@ TrendR Skills are pure Markdown files; core API calls are standard HTTP REST —
 
 **CLI mode (standalone)**
 - Python 3
-- `ANTHROPIC_API_KEY` environment variable
-- Optional: `TRENDR_MODEL` to override the default model `claude-sonnet-4-20250514`
+- Runtime-native credentials (either path):
+  - `--platform codex`: Codex App session or `codex` CLI login
+  - `--platform claude-code`: Claude Code session or `claude` CLI login
+- Or API-key fallback: `OPENAI_API_KEY` (preferred) or `ANTHROPIC_API_KEY`
+- Optional: `TRENDR_PROVIDER=auto|openai|anthropic` (default `auto`)
+- Optional: `TRENDR_MODEL` to override default model (OpenAI default `gpt-5.4-mini`, Anthropic default `claude-sonnet-4-20250514`)
+- Optional: `TRENDR_PLATFORM` to explicitly set runtime (overrides auto-detection)
 
 **Full mode (additional)**
 - [Obsidian](https://obsidian.md) App + obsidian-cli (`brew install obsidian-cli`)
@@ -128,6 +139,14 @@ git clone https://github.com/gy-hou/trendr.git
 cd trendr
 chmod +x install.sh
 ./install.sh
+```
+
+Cross-runtime skill distribution (Codex / Claude Code):
+
+```bash
+bash scripts/install-universal-skills.sh --runtime all --copy
+# or: --runtime codex / --runtime claude-code
+# optional: --force to replace existing installs, --link for symlink mode
 ```
 
 The installer shows a full component manifest and Basic/Full comparison table before asking you to choose. Nothing installs until you confirm.
@@ -181,6 +200,8 @@ openclaw gateway restart
 ```bash
 # Standalone CLI (v2 engine)
 python cli.py run --topic "agentic RAG 2025" --depth B
+python cli.py run --topic "agentic RAG 2025" --platform codex
+python cli.py run --topic "agentic RAG 2025" --platform claude-code
 python cli.py status ~/research/agentic-rag-2025
 python cli.py resume ~/research/agentic-rag-2025
 
@@ -203,6 +224,15 @@ python cli.py resume ~/research/agentic-rag-2025
 # Daily tracking
 "Set up daily arXiv cs.AI check at 9am"
 ```
+
+### CLI Runtime & Provider Troubleshooting
+
+- Runtime-native credentials are preferred: `--platform codex` first tries native Codex session (including Codex App), and `--platform claude-code` first tries native Claude session
+- Errors containing `401 Unauthorized` or `Missing bearer`: log in the corresponding CLI (`codex login` or `claude auth login`), or configure API-key fallback
+- `No model API key found`: native session is unavailable and fallback keys are not configured; set `OPENAI_API_KEY` (preferred) or `ANTHROPIC_API_KEY`
+- Force provider: `export TRENDR_PROVIDER=openai` or `export TRENDR_PROVIDER=anthropic`
+- Force runtime: `export TRENDR_PLATFORM=codex` (or `claude-code` / `openclaw` / `cli`)
+- Alias support: `--platform claudecode` is normalized to `claude-code`
 
 ### Platform Trend Monitoring
 
@@ -419,6 +449,8 @@ All core logic lives in Skill files (Markdown) — edit directly, no code change
 - **Non-frontier model forgetting**: MiniMax M2.5 may occasionally skip Skill files despite 3-layer defense
 - **Full-text reading (Basic)**: abstract only; Full mode with Nano-pdf enables PDF deep reading
 - **No dual-AI review**: extensible (see paper-distill-mcp dual-review mode)
+- **Stability-first scheduling**: Codex/Claude defaults to sequential execution (not full pipeline parallelism)
+- **Very large end-to-end scientific orchestration**: consider [K-Dense Web](https://www.k-dense.ai)
 
 ---
 

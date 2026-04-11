@@ -211,15 +211,32 @@ def check_claim_support(review_path: Path | str, notes_dir: Path | str) -> dict:
     notes_dir = Path(notes_dir)
     missing_inputs = [path for path in (review_path, notes_dir) if not path.exists()]
     if missing_inputs:
-        return _missing_input("warning", missing_inputs)
+        return _missing_input("error", missing_inputs)
 
     review_text = _read_text(review_path)
+    note_files = list(notes_dir.glob("*.md"))
+    if not note_files:
+        cite_keys = sorted(set(_extract_cite_keys(review_text)))
+        issues = [
+            {"citekey": key, "reason": "notes/*.md missing (notes directory has no markdown files)"}
+            for key in cite_keys
+        ]
+        if not issues:
+            issues = [{"reason": "notes directory has no markdown files"}]
+        return _result(
+            "error",
+            False,
+            "notes directory has no .md files; claim-to-note tracing not possible",
+            issues,
+        )
+
     note_index = _extract_note_index(notes_dir)
     citation_sentences = [sentence for sentence in _split_sentences(review_text) if "\\cite" in sentence]
 
     total_claims = 0
     supported_claims = 0
     issues: list[dict] = []
+    missing_note_issues = 0
 
     for sentence in citation_sentences:
         sentence_keys = _extract_cite_keys(sentence)
@@ -235,6 +252,7 @@ def check_claim_support(review_path: Path | str, notes_dir: Path | str) -> dict:
                     "reason": "supporting note not found",
                     "sentence": sentence,
                 })
+                missing_note_issues += 1
                 continue
 
             overlap = sorted(claim_keywords & _tokenize_keywords(note_text))
@@ -253,7 +271,8 @@ def check_claim_support(review_path: Path | str, notes_dir: Path | str) -> dict:
         return _result("warning", True, "No citation-backed claims found in review.md", [])
 
     details = f"{supported_claims}/{total_claims} citation-backed claims have supporting notes"
-    return _result("warning", not issues, details, issues)
+    severity = "error" if missing_note_issues > 0 else "warning"
+    return _result(severity, not issues, details, issues)
 
 
 def check_coverage(
@@ -391,11 +410,36 @@ def run_all_checks(
     error_failures = sum(1 for result in checks.values() if result["severity"] == "error" and not result["pass"])
     warning_failures = sum(1 for result in checks.values() if result["severity"] == "warning" and not result["pass"])
 
+    flattened_issues: list[dict] = []
+    for check_name, check_result in checks.items():
+        if check_result.get("pass") is not False:
+            continue
+        severity = check_result.get("severity", "error")
+        check_issues = check_result.get("issues")
+        if isinstance(check_issues, list) and check_issues:
+            for issue in check_issues:
+                if isinstance(issue, dict):
+                    issue_entry = dict(issue)
+                else:
+                    issue_entry = {"reason": str(issue)}
+                issue_entry.setdefault("check", check_name)
+                issue_entry.setdefault("severity", severity)
+                flattened_issues.append(issue_entry)
+        else:
+            flattened_issues.append(
+                {
+                    "check": check_name,
+                    "severity": severity,
+                    "reason": check_result.get("details", "failed"),
+                }
+            )
+
     return {
         "pass": error_failures == 0,
         "run_id": run_id,
         "checked_at": _now_iso(),
         "summary": f"{error_failures} errors, {warning_failures} warnings",
+        "issues": flattened_issues,
         "checks": checks,
     }
 

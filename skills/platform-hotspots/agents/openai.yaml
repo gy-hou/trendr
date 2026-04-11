@@ -1,0 +1,4 @@
+interface:
+  display_name: "Platform Hotspots"
+  short_description: "Collect and summarize cross-platform technology hotspots."
+  default_prompt: "Use $platform-hotspots for TrendR workflows."

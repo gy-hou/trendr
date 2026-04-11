@@ -1,0 +1,4 @@
+interface:
+  display_name: "TrendR Watchdog"
+  short_description: "Monitor runs and trigger resume behavior for stalled pipelines."
+  default_prompt: "Use $trendr-watchdog for TrendR workflows."

@@ -10,6 +10,15 @@ metadata: {"openclaw": {}}
 
 > ⚠️ 执行验证前，完整阅读本文件。
 
+## Runtime Router (Mandatory)
+
+在执行任何命令前，先确定当前 runtime，并只执行对应命令块：
+
+1. 运行时识别优先级：`TRENDR_PLATFORM` > `OPENCLAW_SESSION_ID` > `CODEX_*` > `CLAUDE_CODE_*` > `cli`
+2. canonical runtime：`openclaw`、`codex`、`claude-code`、`cli`
+3. 别名归一：`claudecode -> claude-code`
+4. 仅执行命中 runtime 的步骤；其余 runtime 步骤必须标记为 `dormant` 并显式跳过
+
 ## 角色
 
 Verifier 是流水线中唯一的质量关卡。它在 WRITING 完成后、DONE 之前运行。
@@ -52,7 +61,7 @@ exec: ls ~/research/[PROJECT]/notes/
    ```
 3. 返回 404 或完全不匹配 → 标记为 phantom paper
 
-### 3. claim_support（severity: warning）
+### 3. claim_support（severity: warning / error）
 
 **规则**：review.md 中包含 `\cite{key}` 的事实性语句，能在对应 notes/{id}.md 中找到支撑。
 
@@ -61,6 +70,7 @@ exec: ls ~/research/[PROJECT]/notes/
 2. 对每个 citation key，查找对应 notes 文件
 3. 检查 notes 中是否有与 claim 相关的内容（关键词匹配 + 语义相似度判断）
 4. 找不到支撑 → warning
+5. 如果 `notes/` 目录缺失、为空、或缺少对应 citekey 的 note → **error**
 
 ### 4. coverage（severity: warning）
 

@@ -16,6 +16,7 @@ See ARCHITECTURE.md §2.2 for the full specification.
 """
 
 import json
+import shlex
 import subprocess
 import time
 from pathlib import Path
@@ -55,6 +56,8 @@ class OpenClawAdapter(PlatformAdapter):
         self.browser_profile = browser_profile
         self.session_id = session_id
         self._pending_agents: dict[str, dict] = {}  # handle → {agent_id, task, status}
+
+    UNSAFE_SHELL_MARKERS = ("&&", "||", ";", "|", "`", "$(", "<", ">", "\n", "\r")
 
     @property
     def platform_name(self) -> str:
@@ -220,9 +223,24 @@ class OpenClawAdapter(PlatformAdapter):
         if self.mode == "instruction":
             return {"tool": "exec", "command": command}
 
+        if any(marker in command for marker in self.UNSAFE_SHELL_MARKERS):
+            return {
+                "exit_code": 2,
+                "stdout": "",
+                "stderr": "unsafe shell metacharacters are not allowed in OpenClawAdapter CLI mode",
+            }
+
+        try:
+            argv = shlex.split(command)
+        except ValueError as e:
+            return {"exit_code": 2, "stdout": "", "stderr": f"invalid shell command: {e}"}
+
+        if not argv:
+            return {"exit_code": 2, "stdout": "", "stderr": "empty shell command"}
+
         try:
             result = subprocess.run(
-                command, shell=True, capture_output=True, text=True, timeout=timeout_sec
+                argv, capture_output=True, text=True, timeout=timeout_sec
             )
             return {
                 "exit_code": result.returncode,
@@ -245,25 +263,35 @@ class OpenClawAdapter(PlatformAdapter):
         if self.mode == "instruction":
             cmd = f"openclaw browser --profile {self.browser_profile}"
             if url:
-                cmd += f' navigate "{url}" && openclaw browser --profile {self.browser_profile}'
-            cmd += f' eval "{js}"'
+                cmd += f" navigate {shlex.quote(url)} && openclaw browser --profile {self.browser_profile}"
+            cmd += f" eval {shlex.quote(js)}"
             return json.dumps({"tool": "exec", "command": cmd})
 
         # CLI mode
-        cmd_parts = []
-        if url:
-            cmd_parts.append(
-                f'openclaw browser --profile {self.browser_profile} navigate "{url}"'
-            )
-        cmd_parts.append(
-            f'openclaw browser --profile {self.browser_profile} eval \'{js}\''
-        )
-        full_cmd = " && ".join(cmd_parts)
-
         try:
+            outputs = []
+            if url:
+                nav = subprocess.run(
+                    ["openclaw", "browser", "--profile", self.browser_profile, "navigate", url],
+                    capture_output=True,
+                    text=True,
+                    timeout=30,
+                )
+                if nav.returncode != 0:
+                    return nav.stderr.strip() or nav.stdout.strip() or "browser navigate failed"
+                if nav.stdout:
+                    outputs.append(nav.stdout.strip())
+
             result = subprocess.run(
-                full_cmd, shell=True, capture_output=True, text=True, timeout=30
+                ["openclaw", "browser", "--profile", self.browser_profile, "eval", js],
+                capture_output=True,
+                text=True,
+                timeout=30,
             )
-            return result.stdout
+            if result.returncode != 0:
+                return result.stderr.strip() or result.stdout.strip() or "browser eval failed"
+            if result.stdout:
+                outputs.append(result.stdout.strip())
+            return "\n".join(part for part in outputs if part).strip()
         except Exception as e:
             return f"Error: {e}"

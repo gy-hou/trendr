@@ -3,6 +3,8 @@
 
 Usage:
     python cli.py run --topic "RL multi-agent market making" --platform openclaw
+    python cli.py run --topic "..." --platform codex
+    python cli.py run --topic "..." --platform claude-code
     python cli.py run --topic "..." --platform cli
     python cli.py resume ~/research/my-project   # resume from run_state.json
 
@@ -15,31 +17,72 @@ import os
 import sys
 from pathlib import Path
 
+from engine.runtime import detect_runtime, normalize_runtime
+
 
 DEPTH_PRESETS = {
     "A": {"min_papers": 20, "target_papers": 30, "min_rounds": 2, "max_rounds": 3},
     "B": {"min_papers": 30, "target_papers": 45, "min_rounds": 2, "max_rounds": 6},
     "C": {"min_papers": 50, "target_papers": 80, "min_rounds": 3, "max_rounds": 10},
 }
+PLATFORM_CHOICES = ["openclaw", "codex", "claude-code", "claudecode", "cli"]
+PROFILE_CHOICES = ["lite", "basic", "full"]
+HOTSPOTS_ALIASES = {"hotspots", "hot", "热点"}
+RESEARCH_ALIASES = {"run", "research", "研究"}
 
 
 def detect_platform() -> str:
     """Auto-detect which platform we're running on."""
-    if os.environ.get("OPENCLAW_SESSION_ID"):
-        return "openclaw"
-    return "cli"
+    return detect_runtime(os.environ)
+
+
+def normalize_user_command_tokens(argv: list[str]) -> list[str]:
+    """Normalize short slash-prefixed commands and multilingual aliases.
+
+    Supported examples:
+      /tr 热点
+      /tr 研究
+      /tr hot
+      /tr research
+    """
+    tokens = list(argv or [])
+    if not tokens:
+        return tokens
+
+    # Prefix compatibility: "/tr ...", "/ tr ...", "/trendr ..."
+    first = tokens[0].strip().lower()
+    if first in {"/tr", "/trendr"}:
+        tokens = tokens[1:]
+    elif len(tokens) >= 2 and tokens[0].strip() == "/" and tokens[1].strip().lower() in {"tr", "trendr"}:
+        tokens = tokens[2:]
+
+    if not tokens:
+        return tokens
+
+    cmd = tokens[0].strip()
+    cmd_lower = cmd.lower()
+    if cmd in HOTSPOTS_ALIASES or cmd_lower in HOTSPOTS_ALIASES:
+        tokens[0] = "hotspots"
+    elif cmd in RESEARCH_ALIASES or cmd_lower in RESEARCH_ALIASES:
+        tokens[0] = "run"
+
+    return tokens
 
 
 def get_adapter(platform: str):
     """Instantiate the appropriate platform adapter."""
-    if platform == "openclaw":
+    platform_name = normalize_runtime(platform)
+    if platform_name == "openclaw":
         from engine.adapters.openclaw import OpenClawAdapter
         return OpenClawAdapter(mode="cli")
-    elif platform == "cli":
+    elif platform_name in {"codex", "claude-code", "cli"}:
         from engine.adapters.cli import CLIAdapter
-        return CLIAdapter(repo_root=Path(__file__).parent)
+        return CLIAdapter(repo_root=Path(__file__).parent, platform_name=platform_name)
     else:
-        print(f"Error: Unknown platform '{platform}'. Available: openclaw, cli", file=sys.stderr)
+        print(
+            f"Error: Unknown platform '{platform}'. Available: {', '.join(PLATFORM_CHOICES)}",
+            file=sys.stderr,
+        )
         sys.exit(1)
 
 
@@ -90,7 +133,16 @@ def cmd_run(args):
     """Start a new research run."""
     from engine.state_machine import ResearchStateMachine
 
-    platform = args.platform or detect_platform()
+    profile = (getattr(args, "profile", "basic") or "basic").lower()
+    if profile == "lite":
+        print(
+            "Error: `run --profile lite` is not supported. "
+            "Use `trendr hotspots` for the independent Lite flow.",
+            file=sys.stderr,
+        )
+        return 2
+
+    platform = normalize_runtime(args.platform) if args.platform else detect_platform()
     adapter = get_adapter(platform)
 
     # Determine project directory
@@ -120,9 +172,12 @@ def cmd_run(args):
         max_rounds=run_params["max_rounds"],
         time_budget_min=args.time_budget,
     )
+    sm.state.setdefault("params", {})["profile"] = profile
+    sm.save_state()
 
     print(f"TrendR v2 — Starting research run")
     print(f"  Topic:   {args.topic}")
+    print(f"  Profile: {profile}")
     print(f"  Depth:   {args.depth.upper()}")
     print(f"  Dir:     {project_dir}")
     print(f"  Platform: {platform}")
@@ -141,10 +196,90 @@ def cmd_run(args):
 
     result = sm.run()
 
+    if result.get("status") == "completed" and profile == "full":
+        from engine.hotspots_runner import HotspotsRunner
+
+        print("\nFull profile: running post-run hotspots collection...")
+        hotspots = HotspotsRunner(
+            project_dir=project_dir,
+            topic=args.topic,
+            per_source_limit=max(1, int(getattr(args, "hotspots_limit", 10) or 10)),
+            timeout_sec=max(5, int(getattr(args, "hotspots_timeout", 12) or 12)),
+        ).run()
+        print(
+            "  Hotspots: "
+            f"{hotspots.get('item_count', 0)} items, "
+            f"{hotspots.get('sources_ok', 0)}/{hotspots.get('sources_total', 0)} sources OK"
+        )
+
     status = result.get("status", "unknown")
     duration = result.get("duration_sec", "?")
     print(f"\nRun {result.get('run_id', '?')}: {status} ({duration}s)")
     return 0 if status == "completed" else 1
+
+
+def cmd_hotspots(args):
+    """Run the independent TrendR Lite hotspot flow."""
+    from engine.hotspots_runner import HotspotsRunner
+
+    topic_value = (getattr(args, "topic", None) or "AI agents and LLM ecosystem").strip()
+
+    if getattr(args, "project_dir", None):
+        project_dir = Path(args.project_dir).expanduser().resolve()
+    else:
+        project_name = sanitize_project_name(topic_value)
+        project_dir = Path.home() / "research" / f"{project_name}-hotspots"
+
+    project_dir.mkdir(parents=True, exist_ok=True)
+
+    runner = HotspotsRunner(
+        project_dir=project_dir,
+        topic=getattr(args, "topic", None),
+        per_source_limit=getattr(args, "per_source_limit", 10),
+        timeout_sec=getattr(args, "timeout_sec", 12),
+        template_path=getattr(args, "template_path", None),
+        private_path=getattr(args, "private_path", None),
+        session_path=getattr(args, "session_path", None),
+        use_private_config=not bool(getattr(args, "no_private_config", False)),
+        auto_init_config=not bool(getattr(args, "no_auto_init", False)),
+    )
+    result = runner.run()
+
+    print("TrendR Lite — Hotspots run")
+    print(f"  Topic:    {topic_value}")
+    print(f"  Profile:  lite")
+    print(f"  Dir:      {project_dir}")
+    print(
+        "  Sources:  "
+        f"{result.get('sources_ok', 0)}/{result.get('sources_total', 0)} OK"
+    )
+    print(f"  Items:    {result.get('item_count', 0)}")
+    print(f"  Raw:      {result.get('raw_path')}")
+    print(f"  Summary:  {result.get('summary_path')}")
+    print(f"  Report:   {result.get('report_path')}")
+    print(f"  Template: {result.get('template_path')}")
+    print(f"  Private:  {result.get('private_path')}")
+    print(f"  Session:  {result.get('session_path')}")
+    print(f"  Reused Session: {bool(result.get('session_reused', False))}")
+
+    return 0 if result.get("status") == "completed" else 1
+
+
+def cmd_hotspots_template(args):
+    """Generate shareable template + private user config skeleton."""
+    from engine.hotspots_runner import write_hotspots_private_stub, write_hotspots_template
+
+    template_path = Path(args.template_path).expanduser().resolve()
+    private_path = Path(args.private_path).expanduser().resolve()
+
+    write_hotspots_template(template_path, force=args.force)
+    write_hotspots_private_stub(private_path, force=args.force)
+
+    print("TrendR Lite — Hotspots template initialized")
+    print(f"  Template: {template_path}")
+    print(f"  Private:  {private_path}")
+    print("  Note: keep private config out of public upload.")
+    return 0
 
 
 def cmd_resume(args):
@@ -158,7 +293,7 @@ def cmd_resume(args):
         print(f"Error: No run_state.json found in {project_dir}", file=sys.stderr)
         return 1
 
-    platform = args.platform or detect_platform()
+    platform = normalize_runtime(args.platform) if args.platform else detect_platform()
     adapter = get_adapter(platform)
 
     sm = ResearchStateMachine(project_dir, adapter)
@@ -198,6 +333,7 @@ def cmd_status(args):
     print(f"State:    {state.get('current_state', '?')}")
     print(f"Platform: {state.get('platform', '?')}")
     print(f"Topic:    {state.get('params', {}).get('topic', '?')}")
+    print(f"Profile:  {state.get('params', {}).get('profile', 'basic')}")
     params = state.get("params", {})
     if params:
         print(
@@ -247,7 +383,7 @@ def _start_watchdog(project_dir: Path):
         print(f"  Watchdog: failed to start ({e})")
 
 
-def main():
+def main(argv: list[str] | None = None):
     parser = argparse.ArgumentParser(
         prog="trendr",
         description="TrendR v2 — Research-agent harness system",
@@ -260,7 +396,13 @@ def main():
     run_parser.add_argument("--topic", "-t", required=True, help="Research topic")
     run_parser.add_argument("--depth", "-d", default="B", choices=["A", "B", "C"],
                            help="Depth: A=light, B=standard, C=deep")
-    run_parser.add_argument("--platform", "-p", choices=["openclaw", "cli"],
+    run_parser.add_argument(
+        "--profile",
+        default="basic",
+        choices=PROFILE_CHOICES,
+        help="Execution profile: basic/full (lite uses standalone `hotspots` command)",
+    )
+    run_parser.add_argument("--platform", "-p", choices=PLATFORM_CHOICES,
                            help="Platform (auto-detected if omitted)")
     run_parser.add_argument("--project-dir", help="Custom project directory")
     run_parser.add_argument("--time-budget", type=int, default=60, help="Time budget in minutes")
@@ -268,18 +410,63 @@ def main():
     run_parser.add_argument("--target-papers", type=int, help="Preferred paper pool size before DISCOVERY exits")
     run_parser.add_argument("--min-rounds", type=int, help="Minimum DISCOVERY rounds before early exit")
     run_parser.add_argument("--max-rounds", type=int, help="Maximum DISCOVERY rounds before force-advance")
+    run_parser.add_argument("--hotspots-limit", type=int, default=10, help="Per-source hotspot item limit (full only)")
+    run_parser.add_argument("--hotspots-timeout", type=int, default=12, help="Hotspots source timeout seconds (full only)")
     run_parser.add_argument("--no-watchdog", action="store_true", help="Don't start watchdog")
+
+    # hotspots (independent Lite flow)
+    hotspots_parser = subparsers.add_parser("hotspots", help="Run independent hotspots flow (Lite)")
+    hotspots_parser.add_argument("--topic", "-t", help="Hotspot topic label (optional; defaults to template/private config)")
+    hotspots_parser.add_argument("--project-dir", help="Custom project directory")
+    hotspots_parser.add_argument("--per-source-limit", type=int, default=10, help="Max items per source")
+    hotspots_parser.add_argument("--timeout-sec", type=int, default=12, help="Source timeout seconds")
+    hotspots_parser.add_argument(
+        "--template-path",
+        default=str((Path.home() / ".trendr" / "hotspots" / "template.json")),
+        help="Hotspots template JSON path",
+    )
+    hotspots_parser.add_argument(
+        "--private-path",
+        default=str((Path.home() / ".trendr" / "hotspots" / "private.json")),
+        help="Private hotspots JSON path (user-only)",
+    )
+    hotspots_parser.add_argument(
+        "--session-path",
+        default=str((Path.home() / ".trendr" / "hotspots" / "session.json")),
+        help="Session metadata JSON path",
+    )
+    hotspots_parser.add_argument("--no-private-config", action="store_true", help="Ignore private config for this run")
+    hotspots_parser.add_argument("--no-auto-init", action="store_true", help="Do not auto-create template/private files")
+
+    # hotspots template initializer
+    hotspots_template_parser = subparsers.add_parser(
+        "hotspots-template",
+        help="Create hotspots template + private skeleton",
+    )
+    hotspots_template_parser.add_argument(
+        "--template-path",
+        default=str((Path.home() / ".trendr" / "hotspots" / "template.json")),
+        help="Output path for shareable template JSON",
+    )
+    hotspots_template_parser.add_argument(
+        "--private-path",
+        default=str((Path.home() / ".trendr" / "hotspots" / "private.json")),
+        help="Output path for private user JSON",
+    )
+    hotspots_template_parser.add_argument("--force", action="store_true", help="Overwrite existing files")
 
     # resume
     resume_parser = subparsers.add_parser("resume", help="Resume an existing run")
     resume_parser.add_argument("project_dir", help="Project directory with run_state.json")
-    resume_parser.add_argument("--platform", "-p", choices=["openclaw", "cli"])
+    resume_parser.add_argument("--platform", "-p", choices=PLATFORM_CHOICES)
 
     # status
     status_parser = subparsers.add_parser("status", help="Show run status")
     status_parser.add_argument("project_dir", help="Project directory")
 
-    args = parser.parse_args()
+    raw_argv = list(sys.argv[1:] if argv is None else argv)
+    normalized_argv = normalize_user_command_tokens(raw_argv)
+    args = parser.parse_args(normalized_argv)
 
     if args.verbose:
         logging.basicConfig(level=logging.DEBUG, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
@@ -288,6 +475,10 @@ def main():
 
     if args.command == "run":
         sys.exit(cmd_run(args))
+    elif args.command == "hotspots":
+        sys.exit(cmd_hotspots(args))
+    elif args.command == "hotspots-template":
+        sys.exit(cmd_hotspots_template(args))
     elif args.command == "resume":
         sys.exit(cmd_resume(args))
     elif args.command == "status":

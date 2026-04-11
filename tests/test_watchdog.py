@@ -48,6 +48,18 @@ class WatchdogTestCase(unittest.TestCase):
 
         self.assertFalse(wd.is_stalled(heartbeat, {"status": "running"}))
 
+    def test_is_stalled_with_invalid_heartbeat_timestamp(self) -> None:
+        wd = self.make_watchdog(idle_timeout_sec=10)
+        heartbeat = {"updated_at": "not-a-timestamp", "agent": "paper-scout", "state": "DISCOVERY"}
+
+        self.assertTrue(wd.is_stalled(heartbeat, {"status": "running"}))
+
+    def test_is_stalled_with_invalid_run_state_timestamp(self) -> None:
+        wd = self.make_watchdog(idle_timeout_sec=10)
+        run_state = {"heartbeat_at": "totally-invalid"}
+
+        self.assertTrue(wd.is_stalled(None, run_state))
+
     def test_is_pipeline_terminal_for_completed_failed_and_running(self) -> None:
         wd = self.make_watchdog()
 
@@ -83,6 +95,14 @@ class WatchdogTestCase(unittest.TestCase):
         wd.write_resume_request({"current_state": "VERIFY"}, None)
 
         self.assertFalse(wd.resume_request_path.exists())
+
+    def test_stall_reason_handles_invalid_timestamp(self) -> None:
+        wd = self.make_watchdog(idle_timeout_sec=10)
+        reason = wd._stall_reason(
+            {"updated_at": "invalid", "agent": "paper-analyzer", "state": "ANALYSIS"},
+            {"current_state": "ANALYSIS"},
+        )
+        self.assertIn("invalid", reason)
 
     def test_run_exits_immediately_when_pipeline_is_terminal(self) -> None:
         wd = self.make_watchdog(poll_sec=1)

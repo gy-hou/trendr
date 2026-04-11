@@ -1,0 +1,4 @@
+interface:
+  display_name: "Review Writer"
+  short_description: "Write structured literature reviews from research artifacts."
+  default_prompt: "Use $review-writer for TrendR workflows."

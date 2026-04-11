@@ -211,6 +211,16 @@ class VerifierTestCase(unittest.TestCase):
         self.assertFalse(result["pass"])
         self.assertEqual(result["issues"][0]["citekey"], "paper1")
 
+    def test_check_claim_support_missing_notes_is_error(self) -> None:
+        review = self.write_review("The retrieval benchmark improves recall and latency \\cite{paper1}.")
+        (self.root / "notes").mkdir(parents=True, exist_ok=True)
+
+        result = check_claim_support(review, self.root / "notes")
+
+        self.assertFalse(result["pass"])
+        self.assertEqual(result["severity"], "error")
+        self.assertIn("no .md files", result["details"])
+
     def test_check_coverage_success(self) -> None:
         review = self.write_review("Strong paper \\cite{paper1}. Secondary paper \\cite{paper2}.")
         candidates = self.write_candidates([
@@ -366,6 +376,8 @@ class VerifierTestCase(unittest.TestCase):
             "taxonomy_consistency",
             "bib_quality",
         })
+        self.assertIn("issues", result)
+        self.assertEqual(result["issues"], [])
         self.assertIn("0 errors", result["summary"])
 
 

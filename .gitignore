@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+tmp_runs/
+.trendr/
+hotspots.private.json
+hotspots.user.json

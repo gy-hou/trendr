@@ -10,6 +10,15 @@ metadata: {"openclaw": {}}
 
 > ⚠️ 每次执行搜索任务前，完整阅读本文件。不要跳过任何部分。
 
+## Runtime Router (Mandatory)
+
+在执行任何命令前，先确定当前 runtime，并只执行对应命令块：
+
+1. 运行时识别优先级：`TRENDR_PLATFORM` > `OPENCLAW_SESSION_ID` > `CODEX_*` > `CLAUDE_CODE_*` > `cli`
+2. canonical runtime：`openclaw`、`codex`、`claude-code`、`cli`
+3. 别名归一：`claudecode -> claude-code`
+4. 仅执行命中 runtime 的步骤；其余 runtime 步骤必须标记为 `dormant` 并显式跳过
+
 ## Multi-Platform Compatibility
 
 This skill uses `web_fetch:` syntax (OpenClaw native). On other platforms:

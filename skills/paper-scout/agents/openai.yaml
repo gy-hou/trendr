@@ -1,0 +1,4 @@
+interface:
+  display_name: "Paper Scout"
+  short_description: "Search and rank academic papers from multiple sources."
+  default_prompt: "Use $paper-scout for TrendR workflows."

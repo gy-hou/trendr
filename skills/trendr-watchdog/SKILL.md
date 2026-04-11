@@ -14,10 +14,24 @@ metadata: {"openclaw": {}}
 > 使用前完整阅读本文件。
 > 核心守夜逻辑在 `supervisor.py`；`watchdog.py` 保留为兼容旧启动命令的入口。
 
+## Runtime Router (Mandatory)
+
+在执行任何命令前，先确定当前 runtime，并只执行对应命令块：
+
+1. 运行时识别优先级：`TRENDR_PLATFORM` > `OPENCLAW_SESSION_ID` > `CODEX_*` > `CLAUDE_CODE_*` > `cli`
+2. canonical runtime：`openclaw`、`codex`、`claude-code`、`cli`
+3. 别名归一：`claudecode -> claude-code`
+4. 仅执行命中 runtime 的步骤；其余 runtime 步骤必须标记为 `dormant` 并显式跳过
+
+## Runtime Strategy
+
+- `openclaw`: 使用本文件的 `supervisor.py` 注入恢复消息（`openclaw agent --session-id ...`）。
+- `codex` / `claude-code` / `cli`: 不做会话注入；使用 `engine/watchdog.py` 监控并写 `resume_request.json`，由状态机循环消费恢复。
+
 ## 前置条件
 
 - `python3` 可用
-- `openclaw` CLI 可用
+- `openclaw` CLI（仅 `openclaw` runtime 需要）
 - 当前任务目录使用 `~/research/[PROJECT]/`
 
 ## 启动流程（建议）
@@ -27,6 +41,8 @@ metadata: {"openclaw": {}}
 3. 任务结束（completed/failed）后，停止 watchdog
 
 ## 启动命令模板
+
+`openclaw` runtime（会话注入模式）：
 
 ```bash
 exec: PROJECT="[PROJECT]" && RUN_ID="[RUN_ID]" && SESSION_ID="[OWNER_SESSION_ID]" && \
@@ -42,6 +58,16 @@ exec: PROJECT="[PROJECT]" && RUN_ID="[RUN_ID]" && SESSION_ID="[OWNER_SESSION_ID]
     --resume-cooldown-sec 300 \
     --heartbeat-sec 300 \
     --max-resume 12 \
+    >> "$HOME/research/$PROJECT/logs/watchdog.out" 2>&1 & \
+  echo $! > "$HOME/research/$PROJECT/logs/watchdog.pid"
+```
+
+`codex` / `claude-code` / `cli` runtime（文件恢复模式）：
+
+```bash
+exec: PROJECT="[PROJECT]" && \
+  mkdir -p "$HOME/research/$PROJECT/logs" && \
+  nohup python3 engine/watchdog.py "$HOME/research/$PROJECT" \
     >> "$HOME/research/$PROJECT/logs/watchdog.out" 2>&1 & \
   echo $! > "$HOME/research/$PROJECT/logs/watchdog.pid"
 ```

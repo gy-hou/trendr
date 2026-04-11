@@ -1,0 +1,4 @@
+interface:
+  display_name: "Verifier"
+  short_description: "Validate citations, claims, coverage, and taxonomy consistency."
+  default_prompt: "Use $verifier for TrendR workflows."

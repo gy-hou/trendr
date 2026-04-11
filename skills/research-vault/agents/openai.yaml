@@ -1,0 +1,4 @@
+interface:
+  display_name: "Research Vault"
+  short_description: "Persist TrendR outputs into an Obsidian research vault."
+  default_prompt: "Use $research-vault for TrendR workflows."

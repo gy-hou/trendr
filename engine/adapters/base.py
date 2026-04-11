@@ -16,7 +16,7 @@ class PlatformAdapter(ABC):
 
     Implementations:
         - OpenClawAdapter: sessions_spawn, web_fetch, exec
-        - CLIAdapter:      subprocess + LLM API calls (standalone)
+        - CLIAdapter:      subprocess + LLM API calls (cli/codex/claude-code)
 
     Future (not in v2):
         - Claude Code source-level integration (separate project)
@@ -134,7 +134,7 @@ class PlatformAdapter(ABC):
         """Return the platform identifier.
 
         Returns:
-            One of: 'openclaw', 'cli'
+            One of: 'openclaw', 'codex', 'claude-code', 'cli'
         """
         ...
 
