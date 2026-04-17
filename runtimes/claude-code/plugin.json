@@ -1,0 +1,43 @@
+{
+  "name": "trendr",
+  "version": "2.1.0",
+  "description": "TrendR — recoverable literature-review harness with platform hotspots",
+  "homepage": "https://github.com/hougarry/trendr",
+  "author": { "name": "TrendR" },
+  "keywords": ["research", "literature-review", "state-machine", "verifier"],
+  "agents": [
+    "../../agents/paper-scout/claude-code.md",
+    "../../agents/paper-analyzer/claude-code.md",
+    "../../agents/review-lead/claude-code.md",
+    "../../agents/verifier/claude-code.md"
+  ],
+  "commands": [
+    "commands/tr.md",
+    "commands/tr/research.md",
+    "commands/tr/hotspots.md",
+    "commands/tr/status.md",
+    "commands/tr/resume.md",
+    "commands/tr/template.md"
+  ],
+  "skills": [
+    "../../skills/paper-scout",
+    "../../skills/paper-analyzer",
+    "../../skills/review-writer",
+    "../../skills/verifier",
+    "../../skills/research-vault",
+    "../../skills/trendr-watchdog",
+    "../../skills/platform-hotspots",
+    "../../skills/chrome-cdp-setup"
+  ],
+  "hooks": {
+    "SessionStart": [
+      { "hooks": [{ "type": "command", "command": "python \"${CLAUDE_PLUGIN_ROOT}/hooks/session_start.py\"" }] }
+    ],
+    "Stop": [
+      { "hooks": [{ "type": "command", "command": "python \"${CLAUDE_PLUGIN_ROOT}/hooks/stop_heartbeat.py\"" }] }
+    ],
+    "SubagentStop": [
+      { "hooks": [{ "type": "command", "command": "python \"${CLAUDE_PLUGIN_ROOT}/hooks/subagent_stop.py\"" }] }
+    ]
+  }
+}

@@ -1,0 +1,14 @@
+You are running TrendR automated weekly literature review.
+Runtime: claude-code. Mode: unattended.
+Topic: read from ~/.trendr/weekly_topic.txt
+
+Steps:
+1. Read skills/paper-scout/claude-code.md
+2. Search 3 sources via CDP browser (arXiv, HF Papers, Semantic Scholar web)
+3. Score and deduplicate candidates, write candidates.csv
+4. Read skills/paper-analyzer/claude-code.md — extract notes for top 8 papers
+5. Read skills/review-writer/claude-code.md — write review.md
+6. Read skills/verifier/claude-code.md — verify top 3 citations, write verify.json
+7. Write run_state.json with status=completed
+
+Do not ask for confirmation. Time budget: 20 minutes.

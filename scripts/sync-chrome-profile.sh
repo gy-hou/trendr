@@ -67,8 +67,8 @@ fi
 
 mkdir -p "$DST"
 
-# Copy essential auth/session files
-for f in "Cookies" "Cookies-journal" "Login Data" "Login Data-journal" "Web Data" "Web Data-journal"; do
+# Copy essential auth/session files (Preferences carries Google account session tokens)
+for f in "Cookies" "Cookies-journal" "Login Data" "Login Data-journal" "Web Data" "Web Data-journal" "Preferences"; do
   [ -f "$SRC/$f" ] && cp -f "$SRC/$f" "$DST/$f"
 done
 

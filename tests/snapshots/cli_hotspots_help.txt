@@ -1,0 +1,27 @@
+usage: trendr hotspots [-h] [--topic TOPIC] [--project-dir PROJECT_DIR]
+                       [--per-source-limit PER_SOURCE_LIMIT]
+                       [--timeout-sec TIMEOUT_SEC]
+                       [--template-path TEMPLATE_PATH]
+                       [--private-path PRIVATE_PATH]
+                       [--session-path SESSION_PATH] [--no-private-config]
+                       [--no-auto-init]
+
+options:
+  -h, --help            show this help message and exit
+  --topic TOPIC, -t TOPIC
+                        Hotspot topic label (optional; defaults to
+                        template/private config)
+  --project-dir PROJECT_DIR
+                        Custom project directory
+  --per-source-limit PER_SOURCE_LIMIT
+                        Max items per source
+  --timeout-sec TIMEOUT_SEC
+                        Source timeout seconds
+  --template-path TEMPLATE_PATH
+                        Hotspots template JSON path
+  --private-path PRIVATE_PATH
+                        Private hotspots JSON path (user-only)
+  --session-path SESSION_PATH
+                        Session metadata JSON path
+  --no-private-config   Ignore private config for this run
+  --no-auto-init        Do not auto-create template/private files

@@ -1,47 +1,92 @@
 #!/usr/bin/env bash
-# TrendR — 卸载脚本 v1.1.0
+# TrendR — Uninstall Dispatcher v1.1.1
+# Routes to runtimes/openclaw/uninstall.sh or runtimes/claude-code/uninstall.sh
 
 set -e
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-WORKSPACE="${OPENCLAW_WORKSPACE:-$HOME/.openclaw/workspace}"
+# ── colors ──────────────────────────────────────────────────────
+RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
+BLUE='\033[0;34m'; CYAN='\033[0;36m'; BOLD='\033[1m'; NC='\033[0m'
+DIM='\033[2m'
 
-echo "🗑️  卸载 TrendR..."
-echo ""
+# ── parse flags ─────────────────────────────────────────────────
+mode=""
+scope="project"
+DRY_RUN=0
 
-# 删除核心 Agents
-for agent in paper-scout paper-analyzer review-lead; do
-    if [ -d "$WORKSPACE/agents/$agent" ]; then
-        rm -rf "$WORKSPACE/agents/$agent"
-        echo "  ✅ 移除 agents/$agent"
-    fi
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --openclaw)    mode="openclaw";    shift ;;
+        --claude-code) mode="claude-code"; shift ;;
+        --all)         mode="all";         shift ;;
+        --user)        scope="user";       shift ;;
+        --project)     scope="project";    shift ;;
+        --dry-run)     DRY_RUN=1;          shift ;;
+        -h|--help)
+            cat << EOF
+Usage: ./uninstall.sh [--openclaw|--claude-code|--all] [--user|--project] [--dry-run]
+
+  --openclaw    Uninstall OpenClaw runtime files
+  --claude-code Uninstall Claude Code runtime files
+  --all         Uninstall both runtimes
+  --user        (claude-code) target ~/.claude/ scope
+  --project     (claude-code) target repo .claude/ scope (default)
+  --dry-run     List actions without executing (claude-code only)
+
+No flag: interactive menu
+EOF
+            exit 0 ;;
+        *) echo "Unknown flag: $1" >&2; exit 2 ;;
+    esac
 done
 
-# 删除核心 Skills
-for skill in paper-scout paper-analyzer review-writer research-vault trendr-watchdog; do
-    if [ -d "$WORKSPACE/skills/$skill" ]; then
-        rm -rf "$WORKSPACE/skills/$skill"
-        echo "  ✅ 移除 skills/$skill"
-    fi
-done
-
-# 删除 Full 模式专属 Skills（如果存在）
-for skill in context7; do
-    if [ -d "$WORKSPACE/skills/$skill" ]; then
-        rm -rf "$WORKSPACE/skills/$skill"
-        echo "  ✅ 移除 skills/$skill (Full 模式)"
-    fi
-done
-
-# 删除配置文件
-rm -f "$WORKSPACE/.trendr-config"
-
+# ── banner ───────────────────────────────────────────────────────
 echo ""
-echo "⚠️  以下需要手动操作："
-echo "  1. 编辑 ~/.openclaw/workspace/AGENTS.md，删除 'TrendR' 部分"
-echo "  2. 编辑 ~/.openclaw/openclaw.json，移除对应的 skills.entries 和 agents.list"
-echo "  3. Obsidian vault 中的 Research/ 目录不会被删除（你的数据）"
-echo "  4. ~/research/ 目录不会被删除（你的研究数据）"
-echo "  5. 依赖 skills（arxiv-watcher、nano-pdf 等）不会被删除（其他功能可能在用）"
+echo -e "${CYAN}${BOLD}TrendR — Uninstaller${NC}"
 echo ""
-echo "  openclaw gateway restart"
-echo ""
+
+# ── interactive menu (no flag) ───────────────────────────────────
+if [[ -z "$mode" ]]; then
+    echo -e "  ${BOLD}Select runtime to uninstall:${NC}"
+    echo ""
+    echo -e "  ${GREEN}[1] OpenClaw${NC}    — remove agents & skills from ~/.openclaw/workspace/"
+    echo -e "  ${CYAN}[2] Claude Code${NC} — remove agent stubs & commands from .claude/"
+    echo -e "  ${BLUE}[3] All${NC}         — uninstall both runtimes"
+    echo -e "  ${RED}[q] Exit${NC}"
+    echo ""
+    printf "  Enter choice [1/2/3/q] (default: 1): "
+    read -r MENU_INPUT
+
+    case "${MENU_INPUT:-1}" in
+        1)   mode="openclaw"    ;;
+        2)   mode="claude-code" ;;
+        3)   mode="all"         ;;
+        q|Q) echo ""; echo -e "${YELLOW}Cancelled.${NC}"; echo ""; exit 0 ;;
+        *)   echo -e "${RED}Invalid choice.${NC}"; exit 1 ;;
+    esac
+fi
+
+# ── export env for sub-scripts ───────────────────────────────────
+export DRY_RUN SCRIPT_DIR scope
+
+# ── dispatch ─────────────────────────────────────────────────────
+case "$mode" in
+    openclaw)
+        bash "$SCRIPT_DIR/runtimes/openclaw/uninstall.sh"
+        ;;
+    claude-code)
+        bash "$SCRIPT_DIR/runtimes/claude-code/uninstall.sh"
+        ;;
+    all)
+        echo -e "${BOLD}── OpenClaw ─────────────────────────────────────────────────${NC}"
+        bash "$SCRIPT_DIR/runtimes/openclaw/uninstall.sh"
+        echo ""
+        echo -e "${BOLD}── Claude Code ──────────────────────────────────────────────${NC}"
+        bash "$SCRIPT_DIR/runtimes/claude-code/uninstall.sh"
+        ;;
+    *)
+        echo "Internal error: unknown mode '$mode'" >&2
+        exit 2
+        ;;
+esac

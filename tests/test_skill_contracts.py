@@ -22,7 +22,33 @@ class SkillContractsTestCase(unittest.TestCase):
                 text = path.read_text(encoding="utf-8")
                 lowered = text.lower()
                 self.assertIn("runtime router", lowered)
-                self.assertIn("dormant", lowered)
+                # "休眠" is the Chinese equivalent of "dormant" used in the updated Runtime Router format
+                has_dormant_semantics = "dormant" in lowered or "休眠" in text
+                self.assertTrue(
+                    has_dormant_semantics,
+                    f"SKILL.md for '{skill}' must contain dormancy semantics ('dormant' or '休眠')",
+                )
+
+    def test_core_skills_have_claude_code_sibling(self) -> None:
+        for skill in self.CORE_SKILLS:
+            with self.subTest(skill=skill):
+                sibling = self.REPO_ROOT / "skills" / skill / "claude-code.md"
+                self.assertTrue(
+                    sibling.exists(),
+                    f"Missing claude-code.md sibling for skill '{skill}'",
+                )
+
+    def test_claude_code_sibling_has_valid_frontmatter(self) -> None:
+        required_keys = {"runtime", "parent_skill", "allowed-tools"}
+        for skill in self.CORE_SKILLS:
+            with self.subTest(skill=skill):
+                path = self.REPO_ROOT / "skills" / skill / "claude-code.md"
+                text = path.read_text(encoding="utf-8")
+                parts = text.split("---", 2)
+                self.assertGreaterEqual(len(parts), 3, f"No valid frontmatter in {path}")
+                fm_text = parts[1]
+                for key in required_keys:
+                    self.assertIn(key, fm_text, f"Missing '{key}' in frontmatter of {path}")
 
 
 if __name__ == "__main__":

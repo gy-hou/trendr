@@ -14,14 +14,15 @@ metadata: {"openclaw": {}}
 > 使用前完整阅读本文件。
 > 核心守夜逻辑在 `supervisor.py`；`watchdog.py` 保留为兼容旧启动命令的入口。
 
-## Runtime Router (Mandatory)
+## Runtime Router（必读）
 
-在执行任何命令前，先确定当前 runtime，并只执行对应命令块：
+识别当前 runtime，只读取对应 sibling，另一方休眠：
 
-1. 运行时识别优先级：`TRENDR_PLATFORM` > `OPENCLAW_SESSION_ID` > `CODEX_*` > `CLAUDE_CODE_*` > `cli`
-2. canonical runtime：`openclaw`、`codex`、`claude-code`、`cli`
-3. 别名归一：`claudecode -> claude-code`
-4. 仅执行命中 runtime 的步骤；其余 runtime 步骤必须标记为 `dormant` 并显式跳过
+- `openclaw`    → 本文件内原有指令块仍然有效（`supervisor.py` 注入模式）
+- `claude-code` → **跳过本文件的指令块**，读 `./claude-code.md` 获取 Claude Code hooks 驱动方式
+- `codex` / `cli` → 参考 `./claude-code.md`（file-based heartbeat 协议）
+
+本节之后的章节描述 **共享知识**（检测逻辑、故障条件、heartbeat 协议）。指令块保持现状（OpenClaw 语法），Claude Code 读者请切换到 `./claude-code.md`。
 
 ## Runtime Strategy
 

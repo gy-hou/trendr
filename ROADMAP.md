@@ -14,6 +14,7 @@ Control-plane maturity:
 - improve run-level observability signals and summaries
 
 Ecosystem / integrations:
+- ✅ **Claude Code as primary runtime** (shipped in v2.1.0): ClaudeCodeAdapter, 4 subagents, 5 slash commands, hooks, plugin manifest
 - harden runtime adapter contracts
 - keep hotspot intake isolated as optional extension
 - improve integration docs and boundary checks for external tools
@@ -31,8 +32,9 @@ Control-plane maturity:
 - structured observability export for run diagnostics
 
 Ecosystem / integrations:
-- deeper OpenClaw runtime alignment
-- cleaner portability for codex/claude-code/cli adapters
+- deeper OpenClaw runtime alignment (LTS maintenance)
+- Deeper MCP integration (chrome / linear / zotero) — v2.2 preview
+- Marketplace publish (`claude /plugin install trendr`) — v2.2 preview
 - optional bibliography/retrieval connectors under strict contract boundaries
 
 ## Long-term

@@ -1,14 +1,14 @@
 # TrendR — Claude Code Configuration
 
 TrendR is an automated literature review + platform hotspot monitoring system.
-It works natively with OpenClaw, and this file provides compatibility for Claude Code.
+**Claude Code is the primary runtime as of v2.1.0.** OpenClaw remains fully supported (legacy).
 
 ## Runtime Contract
 
-Canonical runtime values:
-- `openclaw`
+Canonical runtime values (primary first):
+- `claude-code` ← **primary runtime**
+- `openclaw` ← legacy, fully supported
 - `codex`
-- `claude-code`
 - `cli`
 
 Alias normalization:
@@ -17,9 +17,9 @@ Alias normalization:
 Runtime detection priority:
 1. CLI explicit `--platform`
 2. `TRENDR_PLATFORM`
-3. `OPENCLAW_SESSION_ID`
-4. any `CODEX_*` env key
-5. any `CLAUDE_CODE_*` env key
+3. any `CLAUDE_CODE_*` env key  ← primary runtime check
+4. `OPENCLAW_SESSION_ID`
+5. any `CODEX_*` env key
 6. `cli`
 
 For every SKILL.md:

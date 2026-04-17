@@ -68,10 +68,12 @@ fi
 
 open -na "$CHROME_APP" --args \
   --remote-debugging-port="$PORT" \
+  --remote-allow-origins="*" \
   --user-data-dir="$DATA_DIR" \
   --profile-directory=Default \
   --no-first-run \
-  --no-default-browser-check
+  --no-default-browser-check \
+  --disable-blink-features=AutomationControlled
 
 # Wait for DevTools HTTP endpoint
 for _ in {1..40}; do

@@ -1,0 +1,14 @@
+You are running TrendR automated daily hotspots collection.
+Runtime: claude-code. Mode: unattended.
+
+Steps:
+1. Read skills/platform-hotspots/claude-code.md
+2. Start Chrome CDP: bash scripts/start-chrome-cdp.sh
+3. Collect hotspots from: GitHub Trending, Hacker News, Reddit r/MachineLearning
+4. For JS-heavy sites (Zhihu, X): use scripts/cdp_browse.py with CDP
+5. Write ~/research/daily-YYYY-MM-DD/hotspots_report.md
+6. Write ~/research/daily-YYYY-MM-DD/run_state.json with status=completed
+7. Exit cleanly.
+
+Do not ask for confirmation. Do not wait for user input.
+If any source fails, mark skipped_with_reason and continue.

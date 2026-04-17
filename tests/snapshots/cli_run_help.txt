@@ -1,0 +1,37 @@
+usage: trendr run [-h] --topic TOPIC [--depth {A,B,C}]
+                  [--profile {lite,basic,full}]
+                  [--platform {claude-code,openclaw,codex,claudecode,cli}]
+                  [--project-dir PROJECT_DIR] [--time-budget TIME_BUDGET]
+                  [--min-papers MIN_PAPERS] [--target-papers TARGET_PAPERS]
+                  [--min-rounds MIN_ROUNDS] [--max-rounds MAX_ROUNDS]
+                  [--hotspots-limit HOTSPOTS_LIMIT]
+                  [--hotspots-timeout HOTSPOTS_TIMEOUT] [--no-watchdog]
+
+options:
+  -h, --help            show this help message and exit
+  --topic TOPIC, -t TOPIC
+                        Research topic
+  --depth {A,B,C}, -d {A,B,C}
+                        Depth: A=light, B=standard, C=deep
+  --profile {lite,basic,full}
+                        Execution profile: basic/full (lite uses standalone
+                        `hotspots` command)
+  --platform {claude-code,openclaw,codex,claudecode,cli}, -p {claude-code,openclaw,codex,claudecode,cli}
+                        Platform (auto-detected if omitted)
+  --project-dir PROJECT_DIR
+                        Custom project directory
+  --time-budget TIME_BUDGET
+                        Time budget in minutes
+  --min-papers MIN_PAPERS
+                        Minimum papers before DISCOVERY can advance
+  --target-papers TARGET_PAPERS
+                        Preferred paper pool size before DISCOVERY exits
+  --min-rounds MIN_ROUNDS
+                        Minimum DISCOVERY rounds before early exit
+  --max-rounds MAX_ROUNDS
+                        Maximum DISCOVERY rounds before force-advance
+  --hotspots-limit HOTSPOTS_LIMIT
+                        Per-source hotspot item limit (full only)
+  --hotspots-timeout HOTSPOTS_TIMEOUT
+                        Hotspots source timeout seconds (full only)
+  --no-watchdog         Don't start watchdog

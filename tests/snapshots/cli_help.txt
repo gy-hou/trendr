@@ -1,0 +1,17 @@
+usage: trendr [-h] [--verbose]
+              {run,hotspots,hotspots-template,resume,status} ...
+
+TrendR v2 — Research-agent harness system
+
+positional arguments:
+  {run,hotspots,hotspots-template,resume,status}
+                        Available commands
+    run                 Start a new research run
+    hotspots            Run independent hotspots flow (Lite)
+    hotspots-template   Create hotspots template + private skeleton
+    resume              Resume an existing run
+    status              Show run status
+
+options:
+  -h, --help            show this help message and exit
+  --verbose, -v         Enable debug logging

@@ -226,8 +226,9 @@ class CLIAdapterTestCase(unittest.TestCase):
         self.assertEqual(adapter.platform_name, "codex")
 
     def test_get_adapter_normalizes_claudecode_alias(self) -> None:
+        from engine.adapters.claude_code import ClaudeCodeAdapter
         adapter = trendr_cli.get_adapter("claudecode")
-        self.assertIsInstance(adapter, CLIAdapter)
+        self.assertIsInstance(adapter, ClaudeCodeAdapter)
         self.assertEqual(adapter.platform_name, "claude-code")
 
     def test_runtime_normalization(self) -> None:
@@ -255,9 +256,18 @@ class CLIAdapterTestCase(unittest.TestCase):
         ):
             self.assertEqual(detect_runtime(os.environ), "openclaw")
 
+        # CLAUDE_CODE_* now takes priority over CODEX_*
         with mock.patch.dict(
             os.environ,
             {"CODEX_SHELL": "1", "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1"},
+            clear=True,
+        ):
+            self.assertEqual(detect_runtime(os.environ), "claude-code")
+
+        # CODEX_* alone (no CLAUDE_CODE_* keys) → codex
+        with mock.patch.dict(
+            os.environ,
+            {"CODEX_SHELL": "1"},
             clear=True,
         ):
             self.assertEqual(detect_runtime(os.environ), "codex")

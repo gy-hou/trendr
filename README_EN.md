@@ -84,24 +84,32 @@ Inspired by [karpathy/autoresearch](https://github.com/karpathy/autoresearch) �
 
 ---
 
+## Choose Your Runtime
+
+| Use case | Runtime | Why |
+|----------|---------|-----|
+| Interactive research, ad-hoc queries | **Claude Code** ← recommended | Slash commands, subagents, SessionStart resume |
+| Embedded in a code project | **Codex** | Direct integration with code context |
+| Daily scheduled automation, unattended | **OpenClaw** | Stable cron + supervisor for long-running jobs |
+
+> All three share the same skill files (`skills/*/SKILL.md`) and state machine (`engine/`). The Runtime Router in each SKILL.md automatically puts non-active runtime blocks to sleep.
+
 ## Compatible Runtimes
 
-TrendR Skills are pure Markdown files; core API calls are standard HTTP REST — works across multiple agent platforms:
-
-| Platform | Support | Notes |
-|----------|---------|-------|
-| **OpenClaw** | Full | Native multi-agent orchestration + browser automation |
-| **Standalone CLI** | v2 engine | `python cli.py run --topic "..." --platform cli` via `engine/adapters/cli.py` + OpenAI/Anthropic auto-provider |
-| **Claude Code** | Skills + CLI | `python cli.py run --topic "..." --platform claude-code`, or use CLAUDE.md tool mapping |
-| **Codex** | Skills + CLI | `python cli.py run --topic "..." --platform codex`, or use AGENTS.md tool mapping |
+| Platform | Support | Best for |
+|----------|---------|----------|
+| **Claude Code** | **Primary (v2.1.0+)** | Interactive research; `/tr research`, `/tr hotspots`, resume |
+| **Codex** | Full | Code-project-embedded research; same install as Claude Code |
+| **OpenClaw** | Full (legacy) | Daily cron automation; unattended overnight runs; browser CDP |
+| **Standalone CLI** | v2 engine | Scripted pipeline; `python cli.py run --topic "..." --platform cli` |
 | **Other agents** | Skills readable | `SKILL.md` is standard Markdown; API URLs are directly copyable |
 
-> Native multi-agent orchestration and browser automation are best supported on OpenClaw. Codex / Claude Code / CLI default to stability-first sequential execution, with limited parallelism only for DISCOVERY and ANALYSIS.
+> For Claude Code unattended / daily scheduling, see [`plan/future.md`](./plan/future.md).
 
 Unified runtime contract:
-- canonical runtime: `openclaw`, `codex`, `claude-code`, `cli`
+- canonical runtime: `claude-code` (primary), `openclaw`, `codex`, `cli`
 - alias: `claudecode -> claude-code`
-- detection priority: CLI `--platform` > `TRENDR_PLATFORM` > `OPENCLAW_SESSION_ID` > `CODEX_*` > `CLAUDE_CODE_*` > `cli`
+- detection priority: CLI `--platform` > `TRENDR_PLATFORM` > `CLAUDE_CODE_*` > `OPENCLAW_SESSION_ID` > `CODEX_*` > `cli`
 - each skill executes only the matching runtime block; non-target blocks are marked `dormant` and skipped
 
 ---
@@ -134,25 +142,33 @@ Unified runtime contract:
 
 ## Installation
 
+**Claude Code (recommended)**
 ```bash
 git clone https://github.com/gy-hou/trendr.git
 cd trendr
-chmod +x install.sh
-./install.sh
+./install.sh --claude-code        # installs agent stubs + slash commands
+```
+Then in Claude Code: `/tr research "your topic"`
+
+**Codex**
+```bash
+./install.sh --claude-code        # same install, shared skills
+python3 cli.py run --topic "your topic" --platform codex
 ```
 
-Cross-runtime skill distribution (Codex / Claude Code):
+**OpenClaw (daily automation)**
+```bash
+./install.sh --openclaw           # registers agents in ~/.openclaw/
+# then configure cron / launchd — see plan/future.md
+```
 
+Cross-runtime skill distribution:
 ```bash
 bash scripts/install-universal-skills.sh --runtime all --copy
 # or: --runtime codex / --runtime claude-code
-# optional: --force to replace existing installs, --link for symlink mode
 ```
 
-The installer shows a full component manifest and Basic/Full comparison table before asking you to choose. Nothing installs until you confirm.
-
-**Choose Basic:** Core pipeline ready immediately, no extra tool dependencies.
-**Choose Full:** Automatically installs Scrapling, Obsidian CLI, Nano-pdf, Context7, and guides Zotero setup.
+The installer shows a full component manifest before asking you to confirm. Nothing installs until you do.
 
 Custom Obsidian vault path (Full mode):
 
@@ -197,32 +213,49 @@ openclaw gateway restart
 
 ## Usage
 
+### Claude Code (interactive)
+
+```
+/tr research "agentic RAG 2025" --depth B
+/tr hotspots
+/tr status
+/tr resume ~/research/agentic-rag-2025
+/tr template
+```
+
+Or natural language in any Claude Code session:
+```
+"Survey the latest advances in multi-agent trading"
+"What's trending in AI today across GitHub, HN, and Reddit?"
+"Resume my rl-market-making run"
+```
+
+### Codex
+
 ```bash
-# Standalone CLI (v2 engine)
-python cli.py run --topic "agentic RAG 2025" --depth B
-python cli.py run --topic "agentic RAG 2025" --platform codex
-python cli.py run --topic "agentic RAG 2025" --platform claude-code
+python cli.py run --topic "agentic RAG 2025" --depth B --platform codex
 python cli.py status ~/research/agentic-rag-2025
 python cli.py resume ~/research/agentic-rag-2025
+```
 
-# New literature review
-"Survey the latest advances in [TOPIC]"
+Or in a Codex session read skills directly and call WebFetch/WebSearch tools.
 
-# Search papers
-"Search papers on autonomous AI agents, focus 2024-2025, prefer those with code"
+### OpenClaw (daily automation / unattended)
 
-# Query paper pool
-"Find papers about transformer in my paper pool"
-"Paper pool stats by project"
+```bash
+# Manual trigger
+openclaw agent --agent review-lead --message "Survey multi-agent trading 2025"
 
-# Continue a project
-"Continue rl-multi-agent-finance, add market making direction"
+# Scheduled — configure in cron or launchd (see plan/future.md)
+# The supervisor.py watchdog handles overnight recovery automatically
+```
 
-# Sync to Obsidian
-"Sync research results to Obsidian"
+### CLI (scripted / CI)
 
-# Daily tracking
-"Set up daily arXiv cs.AI check at 9am"
+```bash
+python cli.py run --topic "agentic RAG 2025" --platform cli
+python cli.py hotspots --platform cli
+python cli.py status ~/research/agentic-rag-2025
 ```
 
 ### CLI Runtime & Provider Troubleshooting

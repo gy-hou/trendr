@@ -104,18 +104,57 @@ TrendR is evolving along three tracks:
 
 See [`ROADMAP.md`](./ROADMAP.md).
 
+## 选择你的 Runtime
+
+| 场景 | 推荐 Runtime | 理由 |
+|------|------------|------|
+| 对话式研究、随时提问 | **Claude Code** ← 推荐 | slash command、subagent、SessionStart 恢复 |
+| 代码项目内嵌研究 | **Codex** | 与代码上下文直接集成 |
+| 每日定时自动化、无人值守 | **OpenClaw** | cron + supervisor 长期运行稳定 |
+
+> 三者共用同一套技能文件（`skills/*/SKILL.md`）和状态机（`engine/`），只是驱动层不同。  
+> 每个 SKILL.md 内置 Runtime Router，自动休眠非当前 runtime 的指令块。
+
 ## Quick Start
+
+### Claude Code（推荐 · 互动式研究）
+
 ```bash
 git clone https://github.com/gy-hou/trendr.git
 cd trendr
-chmod +x install.sh
-./install.sh
-python3 cli.py run --topic "agent swarm systems" --platform codex
+./install.sh --claude-code        # 安装 agent stubs + slash commands
 ```
+
+在 Claude Code 中：
+```
+/tr research "multi-agent trading" --depth B
+/tr hotspots
+/tr status
+/tr resume ~/research/my-project
+```
+
+### Codex（代码项目内嵌）
+
+```bash
+./install.sh --claude-code        # 共用同一套安装
+python3 cli.py run --topic "agentic RAG" --platform codex
+```
+
+或在 Codex 会话中直接读取 `skills/*/SKILL.md` 调用对应工具。
+
+### OpenClaw（每日自动化 · 定时任务）
+
+```bash
+./install.sh --openclaw           # 注册 agents 到 ~/.openclaw/
+# 配置每日 cron / launchd（见 plan/future.md §每日定时方案）
+openclaw agent --agent review-lead --message "daily hotspots scan"
+```
+
+> 如需 Claude Code 无人值守定时运行，见 [`plan/future.md`](./plan/future.md)。
 
 最小输入要求：
 - `--topic`：研究主题
-- `--platform`：运行时（可显式指定）
+- `--platform`：运行时（Claude Code 环境下自动检测，无需显式指定）
 
 See [`docs/USAGE.md`](./docs/USAGE.md).
 
@@ -165,6 +204,8 @@ See [`docs/TROUBLESHOOTING.md`](./docs/TROUBLESHOOTING.md).
 - [`docs/OUTPUTS.md`](./docs/OUTPUTS.md)
 - [`docs/TROUBLESHOOTING.md`](./docs/TROUBLESHOOTING.md)
 - [`docs/REFERENCE.md`](./docs/REFERENCE.md)
+- [`docs/CLAUDE_CODE_ADAPTER.md`](./docs/CLAUDE_CODE_ADAPTER.md)
+- [`plan/future.md`](./plan/future.md) — Claude Code 每日 cron 自动化方案
 - [`EVALUATION.md`](./EVALUATION.md)
 - [`ARCHITECTURE.md`](./ARCHITECTURE.md)
 - [`ROADMAP.md`](./ROADMAP.md)

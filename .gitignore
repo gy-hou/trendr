@@ -4,3 +4,9 @@ tmp_runs/
 .trendr/
 hotspots.private.json
 hotspots.user.json
+.venv/
+
+# Claude Code generated products (not source; see runtimes/claude-code/ for authority)
+.claude/commands/
+.claude/agents/
+.claude-plugin/plugin.json

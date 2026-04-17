@@ -2,9 +2,9 @@
 """TrendR v2 — Research-agent harness CLI entry point.
 
 Usage:
-    python cli.py run --topic "RL multi-agent market making" --platform openclaw
+    python cli.py run --topic "RL multi-agent market making" --platform claude-code
+    python cli.py run --topic "..." --platform openclaw
     python cli.py run --topic "..." --platform codex
-    python cli.py run --topic "..." --platform claude-code
     python cli.py run --topic "..." --platform cli
     python cli.py resume ~/research/my-project   # resume from run_state.json
 
@@ -26,7 +26,7 @@ DEPTH_PRESETS = {
     "B": {"min_papers": 30, "target_papers": 45, "min_rounds": 2, "max_rounds": 6},
     "C": {"min_papers": 50, "target_papers": 80, "min_rounds": 3, "max_rounds": 10},
 }
-PLATFORM_CHOICES = ["openclaw", "codex", "claude-code", "claudecode", "cli"]
+PLATFORM_CHOICES = ["claude-code", "openclaw", "codex", "claudecode", "cli"]
 PROFILE_CHOICES = ["lite", "basic", "full"]
 HOTSPOTS_ALIASES = {"hotspots", "hot", "热点"}
 RESEARCH_ALIASES = {"run", "research", "研究"}
@@ -71,13 +71,27 @@ def normalize_user_command_tokens(argv: list[str]) -> list[str]:
     return tokens
 
 
-def get_adapter(platform: str):
+def get_adapter(platform: str, project_dir=None):
     """Instantiate the appropriate platform adapter."""
     platform_name = normalize_runtime(platform)
     if platform_name == "openclaw":
         from engine.adapters.openclaw import OpenClawAdapter
         return OpenClawAdapter(mode="cli")
-    elif platform_name in {"codex", "claude-code", "cli"}:
+    elif platform_name == "claude-code":
+        from engine.adapters.claude_code import ClaudeCodeAdapter
+        raw_mode = os.environ.get("TRENDR_CC_MODE", "").strip().lower()
+        if not raw_mode:
+            raw_mode = (
+                "native"
+                if any(k.startswith("CLAUDE_CODE_") for k in os.environ)
+                else "subprocess"
+            )
+        return ClaudeCodeAdapter(
+            repo_root=Path(__file__).parent,
+            mode=raw_mode,
+            project_dir=project_dir,
+        )
+    elif platform_name in {"codex", "cli"}:
         from engine.adapters.cli import CLIAdapter
         return CLIAdapter(repo_root=Path(__file__).parent, platform_name=platform_name)
     else:
@@ -277,8 +291,6 @@ def cmd_run(args):
                 file=sys.stderr,
             )
             return 1
-    adapter = get_adapter(platform)
-
     # Determine project directory
     if args.project_dir:
         project_dir = Path(args.project_dir).expanduser().resolve()
@@ -287,6 +299,7 @@ def cmd_run(args):
         project_dir = Path.home() / "research" / project_name
 
     project_dir.mkdir(parents=True, exist_ok=True)
+    adapter = get_adapter(platform, project_dir=project_dir)
 
     run_params = resolve_run_params(
         depth=args.depth.upper(),
@@ -466,7 +479,7 @@ def cmd_resume(args):
                 file=sys.stderr,
             )
             return 1
-    adapter = get_adapter(platform)
+    adapter = get_adapter(platform, project_dir=project_dir)
 
     sm = ResearchStateMachine(project_dir, adapter)
     sm.load_state()

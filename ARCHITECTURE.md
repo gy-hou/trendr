@@ -295,9 +295,21 @@ class PlatformAdapter(ABC):
         ...
 ```
 
-### 2.2 Adapter Implementations (v2 Scope)
+### 2.2 Adapter Implementations
 
-#### OpenClaw Adapter (Phase 1 — primary target)
+#### ClaudeCodeAdapter (v2.1.0 — primary runtime)
+```
+spawn_agent  → write to claude_code_dispatch.jsonl; await claude_code_completions/<handle>.json
+http_get     → WebFetch tool (native) or subprocess curl
+run_shell    → Bash tool (native) or subprocess
+browser_eval → MCP browser tools
+read_file    → Read tool / Path.read_text()
+write_file   → Write tool / Path.write_text()
+heartbeat    → atomic write to heartbeat.json (no stdout)
+```
+See `docs/CLAUDE_CODE_ADAPTER.md` for the full dispatch-completion protocol.
+
+#### OpenClaw Adapter (legacy — fully supported)
 ```
 spawn_agent  → sessions_spawn + sessions_yield
 http_get     → web_fetch
@@ -308,7 +320,7 @@ write_file   → write
 heartbeat    → update run_status.json + progress.md
 ```
 
-#### CLI Adapter (Phase 2 — standalone, no LLM platform)
+#### CLI Adapter (standalone, no LLM platform)
 ```
 spawn_agent  → subprocess.Popen with LLM API calls
 http_get     → requests.get / urllib.request
@@ -319,15 +331,15 @@ write_file   → Path.write_text()
 heartbeat    → print + write run_state.json
 ```
 
-#### Claude Code Source Integration (Future — NOT in v2)
+#### Claude Code Integration (shipped in v2.1.0)
 
-> The real Claude Code integration is **not** a thin adapter that maps `spawn_agent → Agent tool`.
-> It's a source-level merge: embedding the TrendR engine into Claude Code's runtime as a
-> research-domain extension. This requires access to Claude Code internals (agent lifecycle,
-> context management, tool dispatch) — far beyond tool mapping.
->
-> v2 builds the engine that this future integration will wrap. The adapter interface is
-> designed to be embeddable, but the actual Claude Code integration is a separate project.
+The `ClaudeCodeAdapter` provides full source-level integration:
+- **native mode**: dispatch via `claude_code_dispatch.jsonl`, completion via `claude_code_completions/<handle>.json`
+- **subprocess mode**: delegates to `CLIAdapter` via `claude -p`
+- **Hooks**: `SessionStart` scans pending runs; `Stop` writes terminal heartbeat; `SubagentStop` unblocks the polling loop
+- **Plugin manifest**: `runtimes/claude-code/plugin.json` with 4 agents + 5 slash commands
+
+See `docs/CLAUDE_CODE_ADAPTER.md` for the full specification.
 
 ### 2.3 Adapter Selection
 
@@ -336,8 +348,10 @@ def get_adapter(platform: str = "auto") -> PlatformAdapter:
     if platform == "auto":
         platform = detect_platform()
     adapters = {
-        "openclaw": OpenClawAdapter,
+        "claude-code": ClaudeCodeAdapter,   # primary (v2.1.0+)
+        "openclaw": OpenClawAdapter,        # legacy support
         "cli": CLIAdapter,
+        "codex": CLIAdapter,
     }
     if platform not in adapters:
         raise ValueError(f"Unknown platform: {platform}. Available: {list(adapters.keys())}")
