@@ -12,6 +12,7 @@ See ARCHITECTURE.md for the full specification.
 """
 
 import argparse
+import json
 import logging
 import os
 import sys
@@ -29,6 +30,7 @@ PLATFORM_CHOICES = ["openclaw", "codex", "claude-code", "claudecode", "cli"]
 PROFILE_CHOICES = ["lite", "basic", "full"]
 HOTSPOTS_ALIASES = {"hotspots", "hot", "热点"}
 RESEARCH_ALIASES = {"run", "research", "研究"}
+TRENDR_OPENCLAW_AGENTS = ("paper-scout", "paper-analyzer", "review-lead", "verifier")
 
 
 def detect_platform() -> str:
@@ -86,6 +88,90 @@ def get_adapter(platform: str):
         sys.exit(1)
 
 
+def load_openclaw_config() -> dict | None:
+    """Load the local OpenClaw config when present."""
+    config_path = Path.home() / ".openclaw" / "openclaw.json"
+    try:
+        return json.loads(config_path.read_text(encoding="utf-8"))
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        return None
+
+
+def validate_openclaw_agent_registry(config: dict | None = None) -> list[str]:
+    """Return missing TrendR agent ids from the local OpenClaw registry."""
+    data = config if config is not None else load_openclaw_config()
+    if not isinstance(data, dict):
+        return list(TRENDR_OPENCLAW_AGENTS)
+
+    registered = {
+        entry.get("id")
+        for entry in data.get("agents", {}).get("list", [])
+        if isinstance(entry, dict) and entry.get("id")
+    }
+    return sorted(agent for agent in TRENDR_OPENCLAW_AGENTS if agent not in registered)
+
+
+def _extract_openclaw_primary_model(model_config) -> str:
+    if isinstance(model_config, str):
+        return model_config
+    if isinstance(model_config, dict):
+        primary = model_config.get("primary")
+        if isinstance(primary, str):
+            return primary
+    return ""
+
+
+def _resolve_openclaw_agent_primary_model(config: dict, agent_id: str) -> str:
+    agents = {
+        entry.get("id"): entry
+        for entry in config.get("agents", {}).get("list", [])
+        if isinstance(entry, dict) and entry.get("id")
+    }
+    agent_config = agents.get(agent_id, {})
+    agent_model = _extract_openclaw_primary_model(agent_config.get("model"))
+    if agent_model:
+        return agent_model
+
+    defaults = config.get("agents", {}).get("defaults", {})
+    return _extract_openclaw_primary_model(defaults.get("model"))
+
+
+def validate_openclaw_agent_auth(config: dict | None = None) -> list[str]:
+    """Return auth-route mismatches for direct `openclaw agent` runs."""
+    data = config if config is not None else load_openclaw_config()
+    if not isinstance(data, dict):
+        return []
+
+    auth_profiles = data.get("auth", {}).get("profiles", {})
+    configured_providers = {
+        profile.get("provider")
+        for profile in auth_profiles.values()
+        if isinstance(profile, dict) and profile.get("provider")
+    }
+    issues: list[str] = []
+    reported_models: set[str] = set()
+
+    for agent_id in TRENDR_OPENCLAW_AGENTS:
+        primary_model = _resolve_openclaw_agent_primary_model(data, agent_id)
+        if not primary_model or "/" not in primary_model or primary_model in reported_models:
+            continue
+        provider = primary_model.split("/", 1)[0]
+        if provider not in configured_providers:
+            issues.append(
+                f"Agent `{agent_id}` resolves to `{primary_model}`, but provider "
+                f"`{provider}` has no auth profile in `~/.openclaw/openclaw.json`."
+            )
+            reported_models.add(primary_model)
+
+    if issues and "auth" not in set(data.get("plugins", {}).get("allow", [])):
+        issues.append(
+            "OpenClaw auth plugin is disabled (`plugins.allow` excludes `auth`), "
+            "so `openclaw auth login` is unavailable."
+        )
+
+    return issues
+
+
 def sanitize_project_name(topic: str) -> str:
     """Convert topic string to a safe directory name."""
     # Take first 50 chars, lowercase, replace spaces/special with hyphens
@@ -129,6 +215,23 @@ def resolve_run_params(
     }
 
 
+def update_local_research_history(project_dir: Path, state: dict) -> dict | None:
+    """Persist a repo-local research history summary for recent runs."""
+    from engine.research_history import update_research_history
+
+    try:
+        return update_research_history(
+            repo_root=Path(__file__).parent,
+            project_dir=project_dir,
+            state=state,
+            overflow_policy=os.environ.get("TRENDR_HISTORY_OVERFLOW", "prompt"),
+            interactive=bool(sys.stdin.isatty() and sys.stdout.isatty()),
+        )
+    except Exception as exc:
+        print(f"Warning: failed to update research history: {exc}", file=sys.stderr)
+        return None
+
+
 def cmd_run(args):
     """Start a new research run."""
     from engine.state_machine import ResearchStateMachine
@@ -143,6 +246,37 @@ def cmd_run(args):
         return 2
 
     platform = normalize_runtime(args.platform) if args.platform else detect_platform()
+    if platform == "openclaw":
+        openclaw_config = load_openclaw_config()
+        missing_agents = validate_openclaw_agent_registry(openclaw_config)
+        if missing_agents:
+            print(
+                "Error: OpenClaw runtime is missing TrendR agents: "
+                + ", ".join(missing_agents),
+                file=sys.stderr,
+            )
+            print(
+                "Fix: rerun `./install.sh` or register these agents in "
+                "`~/.openclaw/openclaw.json`, then run `openclaw gateway restart`.",
+                file=sys.stderr,
+            )
+            return 1
+        auth_issues = validate_openclaw_agent_auth(openclaw_config)
+        if auth_issues:
+            print(
+                "Error: OpenClaw runtime has provider/auth mismatches for direct TrendR agent runs:",
+                file=sys.stderr,
+            )
+            for issue in auth_issues:
+                print(f"  - {issue}", file=sys.stderr)
+            print(
+                "Fix: TrendR CLI mode uses direct `openclaw agent --agent ...` calls, "
+                "so align `agents.defaults.model.primary` with a provider that has a "
+                "working auth profile, or add auth for the current primary provider. "
+                "If you change `~/.openclaw/openclaw.json`, run `openclaw gateway restart`.",
+                file=sys.stderr,
+            )
+            return 1
     adapter = get_adapter(platform)
 
     # Determine project directory
@@ -215,6 +349,13 @@ def cmd_run(args):
     status = result.get("status", "unknown")
     duration = result.get("duration_sec", "?")
     print(f"\nRun {result.get('run_id', '?')}: {status} ({duration}s)")
+    history_result = update_local_research_history(project_dir, result)
+    if history_result:
+        print(
+            "History: "
+            f"{history_result['markdown_path']} "
+            f"(records={history_result['record_count']}, action={history_result['action']})"
+        )
     return 0 if status == "completed" else 1
 
 
@@ -294,6 +435,37 @@ def cmd_resume(args):
         return 1
 
     platform = normalize_runtime(args.platform) if args.platform else detect_platform()
+    if platform == "openclaw":
+        openclaw_config = load_openclaw_config()
+        missing_agents = validate_openclaw_agent_registry(openclaw_config)
+        if missing_agents:
+            print(
+                "Error: OpenClaw runtime is missing TrendR agents: "
+                + ", ".join(missing_agents),
+                file=sys.stderr,
+            )
+            print(
+                "Fix: rerun `./install.sh` or register these agents in "
+                "`~/.openclaw/openclaw.json`, then run `openclaw gateway restart`.",
+                file=sys.stderr,
+            )
+            return 1
+        auth_issues = validate_openclaw_agent_auth(openclaw_config)
+        if auth_issues:
+            print(
+                "Error: OpenClaw runtime has provider/auth mismatches for direct TrendR agent runs:",
+                file=sys.stderr,
+            )
+            for issue in auth_issues:
+                print(f"  - {issue}", file=sys.stderr)
+            print(
+                "Fix: TrendR CLI mode uses direct `openclaw agent --agent ...` calls, "
+                "so align `agents.defaults.model.primary` with a provider that has a "
+                "working auth profile, or add auth for the current primary provider. "
+                "If you change `~/.openclaw/openclaw.json`, run `openclaw gateway restart`.",
+                file=sys.stderr,
+            )
+            return 1
     adapter = get_adapter(platform)
 
     sm = ResearchStateMachine(project_dir, adapter)
@@ -312,6 +484,13 @@ def cmd_resume(args):
 
     status = result.get("status", "unknown")
     print(f"\nRun {run_id}: {status}")
+    history_result = update_local_research_history(project_dir, result)
+    if history_result:
+        print(
+            "History: "
+            f"{history_result['markdown_path']} "
+            f"(records={history_result['record_count']}, action={history_result['action']})"
+        )
     return 0 if status == "completed" else 1
 
 

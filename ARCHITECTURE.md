@@ -302,7 +302,7 @@ class PlatformAdapter(ABC):
 spawn_agent  → sessions_spawn + sessions_yield
 http_get     → web_fetch
 run_shell    → exec:
-browser_eval → openclaw browser --profile cdp eval "..."
+browser_eval → openclaw browser --browser-profile cdp eval "..."
 read_file    → read
 write_file   → write
 heartbeat    → update run_status.json + progress.md

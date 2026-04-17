@@ -22,9 +22,22 @@ class CLIAdapterTestCase(unittest.TestCase):
             encoding="utf-8",
         )
         self.adapter = CLIAdapter(repo_root=self.root)
+        self.env_patcher = mock.patch.dict(
+            os.environ,
+            {"TRENDR_HISTORY_ROOT": str(self.root / ".trendr-history")},
+            clear=False,
+        )
+        self.env_patcher.start()
 
     def tearDown(self) -> None:
+        self.env_patcher.stop()
         self.temp_dir.cleanup()
+
+    def write_openclaw_config(self, payload: dict) -> Path:
+        config_path = self.root / ".openclaw" / "openclaw.json"
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+        config_path.write_text(json.dumps(payload), encoding="utf-8")
+        return config_path
 
     def test_spawn_agent_calls_anthropic_api_and_await_returns_result(self) -> None:
         response = mock.MagicMock()
@@ -308,6 +321,102 @@ class CLIAdapterTestCase(unittest.TestCase):
         state = json.loads((project_dir / "run_state.json").read_text(encoding="utf-8"))
         self.assertEqual(state["platform"], "codex")
         self.assertEqual(state["params"]["profile"], "basic")
+
+    def test_validate_openclaw_agent_registry_reads_local_config(self) -> None:
+        self.write_openclaw_config(
+            {
+                "agents": {
+                    "list": [
+                        {"id": "paper-scout"},
+                        {"id": "paper-analyzer"},
+                        {"id": "review-lead"},
+                    ]
+                }
+            }
+        )
+
+        with mock.patch("cli.Path.home", return_value=self.root):
+            missing = trendr_cli.validate_openclaw_agent_registry()
+
+        self.assertEqual(missing, ["verifier"])
+
+    def test_validate_openclaw_agent_auth_detects_provider_mismatch(self) -> None:
+        self.write_openclaw_config(
+            {
+                "auth": {
+                    "profiles": {
+                        "minimax-portal:default": {
+                            "provider": "minimax-portal",
+                            "mode": "oauth",
+                        }
+                    }
+                },
+                "plugins": {"allow": ["browser", "minimax"]},
+                "agents": {
+                    "defaults": {
+                        "model": {"primary": "minimax-cn/MiniMax-M2.7"},
+                        "subagents": {"model": "minimax-portal/MiniMax-M2.7"},
+                    },
+                    "list": [{"id": agent_id} for agent_id in trendr_cli.TRENDR_OPENCLAW_AGENTS],
+                },
+            }
+        )
+
+        with mock.patch("cli.Path.home", return_value=self.root):
+            issues = trendr_cli.validate_openclaw_agent_auth()
+
+        self.assertEqual(len(issues), 2)
+        self.assertIn("minimax-cn/MiniMax-M2.7", issues[0])
+        self.assertIn("auth plugin is disabled", issues[1])
+
+    def test_cmd_run_rejects_openclaw_before_execution_when_auth_route_is_invalid(self) -> None:
+        project_dir = self.root / "openclaw-run"
+        args = Namespace(
+            platform="openclaw",
+            topic="OpenClaw preflight",
+            depth="A",
+            profile="basic",
+            project_dir=str(project_dir),
+            time_budget=10,
+            min_papers=None,
+            target_papers=None,
+            min_rounds=None,
+            max_rounds=None,
+            hotspots_limit=10,
+            hotspots_timeout=12,
+            no_watchdog=True,
+        )
+        self.write_openclaw_config(
+            {
+                "auth": {
+                    "profiles": {
+                        "minimax-portal:default": {
+                            "provider": "minimax-portal",
+                            "mode": "oauth",
+                        }
+                    }
+                },
+                "plugins": {"allow": ["browser", "minimax"]},
+                "agents": {
+                    "defaults": {
+                        "model": {"primary": "minimax-cn/MiniMax-M2.7"},
+                        "subagents": {"model": "minimax-portal/MiniMax-M2.7"},
+                    },
+                    "list": [{"id": agent_id} for agent_id in trendr_cli.TRENDR_OPENCLAW_AGENTS],
+                },
+            }
+        )
+
+        with mock.patch("cli.Path.home", return_value=self.root):
+            with mock.patch("builtins.print") as mocked_print:
+                with mock.patch("cli.get_adapter") as mocked_get_adapter:
+                    code = trendr_cli.cmd_run(args)
+
+        self.assertEqual(code, 1)
+        mocked_get_adapter.assert_not_called()
+        printed = "\n".join(str(call.args[0]) for call in mocked_print.call_args_list)
+        self.assertIn("provider/auth mismatches", printed)
+        self.assertIn("direct `openclaw agent --agent ...` calls", printed)
 
     def test_cmd_run_rejects_lite_profile_and_points_to_hotspots(self) -> None:
         args = Namespace(

@@ -1,3 +1,4 @@
+import json
 import unittest
 from unittest import mock
 
@@ -53,14 +54,92 @@ class OpenClawAdapterTestCase(unittest.TestCase):
         second_call = mocked_run.call_args_list[1].args[0]
         self.assertEqual(
             first_call,
-            ["openclaw", "browser", "--profile", "cdp", "navigate", "https://example.com"],
+            ["openclaw", "browser", "--browser-profile", "cdp", "navigate", "https://example.com"],
         )
         self.assertEqual(
             second_call,
-            ["openclaw", "browser", "--profile", "cdp", "eval", "document.title"],
+            ["openclaw", "browser", "--browser-profile", "cdp", "eval", "document.title"],
         )
         for call in mocked_run.call_args_list:
             self.assertNotIn("shell", call.kwargs)
+
+    def test_spawn_agent_marks_auth_payload_errors_as_failed(self) -> None:
+        proc = mock.MagicMock()
+        proc.returncode = 0
+        proc.stderr = ""
+        proc.stdout = json.dumps(
+            {
+                "status": "ok",
+                "summary": "completed",
+                "result": {
+                    "payloads": [
+                        {"text": "HTTP 401 authentication_error: invalid api key"}
+                    ],
+                    "stopReason": "error",
+                    "completion": {
+                        "stopReason": "error",
+                        "finishReason": "error",
+                    },
+                },
+            }
+        )
+
+        with mock.patch("engine.adapters.openclaw.subprocess.run", return_value=proc):
+            handle = self.adapter.spawn_agent("paper-scout", "health check", timeout_sec=5)
+
+        result = self.adapter.await_agent(handle)
+        self.assertEqual(result["status"], "failed")
+        self.assertIn("invalid api key", result["output"])
+        self.assertIn("invalid api key", result["error"])
+
+    def test_spawn_agent_marks_stop_reason_errors_as_failed(self) -> None:
+        proc = mock.MagicMock()
+        proc.returncode = 0
+        proc.stderr = ""
+        proc.stdout = json.dumps(
+            {
+                "status": "ok",
+                "summary": "completed",
+                "result": {
+                    "payloads": [{"text": "agent stopped unexpectedly"}],
+                    "stopReason": "error",
+                },
+            }
+        )
+
+        with mock.patch("engine.adapters.openclaw.subprocess.run", return_value=proc):
+            handle = self.adapter.spawn_agent("paper-scout", "health check", timeout_sec=5)
+
+        result = self.adapter.await_agent(handle)
+        self.assertEqual(result["status"], "failed")
+        self.assertIn("agent stopped unexpectedly", result["output"])
+
+    def test_spawn_agent_keeps_clean_json_results_completed(self) -> None:
+        proc = mock.MagicMock()
+        proc.returncode = 0
+        proc.stderr = ""
+        proc.stdout = json.dumps(
+            {
+                "status": "ok",
+                "summary": "completed",
+                "result": {
+                    "payloads": [{"text": "wrote candidates.csv"}],
+                    "stopReason": "completed",
+                    "completion": {
+                        "stopReason": "completed",
+                        "finishReason": "stop",
+                    },
+                },
+            }
+        )
+
+        with mock.patch("engine.adapters.openclaw.subprocess.run", return_value=proc):
+            handle = self.adapter.spawn_agent("paper-scout", "health check", timeout_sec=5)
+
+        result = self.adapter.await_agent(handle)
+        self.assertEqual(result["status"], "completed")
+        self.assertEqual(result["output"], "wrote candidates.csv")
+        self.assertEqual(result["error"], "")
 
 
 if __name__ == "__main__":

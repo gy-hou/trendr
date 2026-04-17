@@ -71,6 +71,32 @@ def _normalize_keywords(value) -> list[str]:
     return out
 
 
+def _sanitize_cdp_user(value) -> str:
+    token = re.sub(r"[^a-z0-9._-]+", "-", str(value or "").strip().lower()).strip("-")
+    return token or "default"
+
+
+def _default_cdp_store_hint(cdp_user: str) -> str:
+    if cdp_user == "default":
+        return "~/.openclaw/browser/cdp-automation"
+    return f"~/.openclaw/browser/cdp-users/{cdp_user}"
+
+
+def _resolve_cdp_store_hint(value, cdp_user: str) -> str:
+    raw = str(value or "").strip()
+    if not raw:
+        return _default_cdp_store_hint(cdp_user)
+    return raw.replace("<user-key>", cdp_user)
+
+
+def _default_cdp_login_hint(cdp_user: str) -> str:
+    return (
+        "On first use, open the dedicated agent Chrome for "
+        f"`{cdp_user}` and sign in to the sites you want TrendR to read. "
+        "Later runs should reuse the same CDP store."
+    )
+
+
 def default_hotspots_template() -> dict:
     """Return a shareable default hotspots template."""
     return {
@@ -93,7 +119,9 @@ def default_hotspots_template() -> dict:
         "session": {
             "persist": True,
             "browser_profile": "cdp",
-            "store_hint": "~/.openclaw/browser/cdp-automation",
+            "cdp_user": "default",
+            "store_hint": _default_cdp_store_hint("default"),
+            "login_hint": _default_cdp_login_hint("default"),
         },
     }
 
@@ -107,6 +135,9 @@ def default_hotspots_private_stub() -> dict:
         "session": {
             "persist": True,
             "browser_profile": "cdp",
+            "cdp_user": "default",
+            "store_hint": _default_cdp_store_hint("default"),
+            "login_hint": _default_cdp_login_hint("default"),
             "note": "Fill this file with personal interests. Do not upload it to public repos.",
         },
         "upload": {
@@ -193,6 +224,14 @@ class HotspotsRunner:
         session_cfg = self.config.get("session", {}) if isinstance(self.config.get("session"), dict) else {}
         self.persist_session = bool(session_cfg.get("persist", True))
         self.session_browser_profile = str(session_cfg.get("browser_profile") or "cdp")
+        self.session_cdp_user = _sanitize_cdp_user(session_cfg.get("cdp_user") or "default")
+        self.session_store_hint = _resolve_cdp_store_hint(
+            session_cfg.get("store_hint"),
+            self.session_cdp_user,
+        )
+        self.session_login_hint = str(
+            session_cfg.get("login_hint") or _default_cdp_login_hint(self.session_cdp_user)
+        )
 
     @property
     def raw_path(self) -> Path:
@@ -277,6 +316,9 @@ class HotspotsRunner:
                 "persist": self.persist_session,
                 "reused": session_reused,
                 "browser_profile": self.session_browser_profile,
+                "cdp_user": self.session_cdp_user,
+                "store_hint": self.session_store_hint,
+                "login_hint": self.session_login_hint,
             },
         }
         self.raw_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
@@ -298,6 +340,10 @@ class HotspotsRunner:
             "sources_ok": sum(1 for x in source_results if x["status"] == "ok"),
             "sources_total": len(source_results),
             "session_reused": session_reused,
+            "browser_profile": self.session_browser_profile,
+            "cdp_user": self.session_cdp_user,
+            "store_hint": self.session_store_hint,
+            "login_hint": self.session_login_hint,
             "template_path": str(self.template_path),
             "private_path": str(self.private_path),
             "session_path": str(self.session_path),
@@ -533,6 +579,9 @@ class HotspotsRunner:
             "updated_at": _now_iso(),
             "run_count": run_count,
             "browser_profile": self.session_browser_profile,
+            "cdp_user": self.session_cdp_user,
+            "store_hint": self.session_store_hint,
+            "login_hint": self.session_login_hint,
             "enabled_platforms": [x.get("source") for x in source_results if x.get("source")],
             "sources_ok": [x["source"] for x in source_results if x.get("status") == "ok"],
             "sources_failed": [
@@ -579,6 +628,8 @@ class HotspotsRunner:
         session_info = summary.get("session", {})
         lines.append(f"- Session Reused: {bool(session_info.get('reused', False))}")
         lines.append(f"- Browser Profile: {session_info.get('browser_profile', 'cdp')}")
+        lines.append(f"- CDP User: {session_info.get('cdp_user', 'default')}")
+        lines.append(f"- CDP Store: {session_info.get('store_hint', _default_cdp_store_hint('default'))}")
         kf = summary.get("keyword_filter", {})
         lines.append(
             "- Keyword Filter: "
@@ -586,6 +637,7 @@ class HotspotsRunner:
             f"matched={int(kf.get('matched_items', 0))}, "
             f"fallback={bool(kf.get('fallback_to_unfiltered', False))}"
         )
+        lines.append(f"- Login Hint: {session_info.get('login_hint', _default_cdp_login_hint('default'))}")
         lines.append("")
 
         failed = summary.get("sources_failed", [])

@@ -1,0 +1,41 @@
+"""State constants and config exports for the TrendR engine."""
+
+from .config import (
+    DEFAULT_COVERAGE_THRESHOLD,
+    DEFAULT_FALLBACK_ANALYSIS_ROWS,
+    DEFAULT_MAX_DISCOVERY_ROUNDS,
+    DEFAULT_MAX_FIX_ROUNDS,
+    DEFAULT_MIN_DISCOVERY_ROUNDS,
+    PROGRESS_MAP,
+    STATE_TIMEOUTS,
+)
+from .definitions import (
+    ANALYSIS,
+    DISCOVERY,
+    DONE,
+    GAP_CHECK,
+    INIT,
+    STATE_AGENTS,
+    VALID_STATES,
+    VERIFY,
+    WRITING,
+)
+
+__all__ = [
+    "INIT",
+    "DISCOVERY",
+    "ANALYSIS",
+    "GAP_CHECK",
+    "WRITING",
+    "VERIFY",
+    "DONE",
+    "VALID_STATES",
+    "STATE_AGENTS",
+    "STATE_TIMEOUTS",
+    "PROGRESS_MAP",
+    "DEFAULT_COVERAGE_THRESHOLD",
+    "DEFAULT_MAX_DISCOVERY_ROUNDS",
+    "DEFAULT_MIN_DISCOVERY_ROUNDS",
+    "DEFAULT_MAX_FIX_ROUNDS",
+    "DEFAULT_FALLBACK_ANALYSIS_ROWS",
+]

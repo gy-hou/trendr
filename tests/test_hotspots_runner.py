@@ -73,6 +73,11 @@ class HotspotsRunnerTestCase(unittest.TestCase):
         self.assertTrue(raw["privacy"]["private_keywords_hidden"])
         self.assertIn("TrendR Lite Hotspots Report", report)
         self.assertIn("https://example.com/a", report)
+        self.assertEqual(raw["session"]["browser_profile"], "cdp")
+        self.assertEqual(raw["session"]["cdp_user"], "default")
+        self.assertIn("sign in to the sites you want TrendR to read", raw["session"]["login_hint"])
+        self.assertIn("CDP User: default", report)
+        self.assertIn("Login Hint:", report)
 
     def test_run_keeps_going_when_one_source_fails(self) -> None:
         template_path = self.project_dir / "template.json"
@@ -158,6 +163,53 @@ class HotspotsRunnerTestCase(unittest.TestCase):
 
         raw = json.loads(raw_text)
         self.assertEqual(raw["keyword_filter"]["private_keyword_count"], 1)
+
+    def test_session_cdp_user_controls_store_hint_and_report(self) -> None:
+        template_path = self.project_dir / "template.json"
+        private_path = self.project_dir / "private.json"
+        session_path = self.project_dir / "session.json"
+
+        template = {
+            "version": 1,
+            "topic": "AI",
+            "keywords": ["AI"],
+            "platforms": [{"id": "hackernews", "enabled": True}],
+            "session": {
+                "browser_profile": "cdp",
+                "cdp_user": "Guest Analyst",
+                "store_hint": "~/.openclaw/browser/cdp-users/<user-key>",
+            },
+        }
+        template_path.write_text(json.dumps(template, ensure_ascii=False), encoding="utf-8")
+        private_path.write_text(json.dumps({}, ensure_ascii=False), encoding="utf-8")
+
+        runner = HotspotsRunner(
+            project_dir=self.project_dir,
+            per_source_limit=2,
+            timeout_sec=5,
+            template_path=template_path,
+            private_path=private_path,
+            session_path=session_path,
+        )
+
+        with mock.patch.object(
+            runner,
+            "_fetch_hackernews",
+            return_value=[{"source": "hackernews", "title": "AI progress", "url": "https://example.com/ai", "score": 1, "meta": {}}],
+        ):
+            result = runner.run()
+
+        self.assertEqual(result["status"], "completed")
+        self.assertEqual(result["cdp_user"], "guest-analyst")
+        self.assertEqual(result["store_hint"], "~/.openclaw/browser/cdp-users/guest-analyst")
+
+        raw = json.loads((self.project_dir / "hotspots_raw.json").read_text(encoding="utf-8"))
+        report = (self.project_dir / "hotspots_report.md").read_text(encoding="utf-8")
+
+        self.assertEqual(raw["session"]["cdp_user"], "guest-analyst")
+        self.assertEqual(raw["session"]["store_hint"], "~/.openclaw/browser/cdp-users/guest-analyst")
+        self.assertIn("CDP User: guest-analyst", report)
+        self.assertIn("~/.openclaw/browser/cdp-users/guest-analyst", report)
 
     def test_unknown_platform_is_marked_unsupported(self) -> None:
         template_path = self.project_dir / "template.json"

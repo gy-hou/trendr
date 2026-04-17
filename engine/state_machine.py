@@ -15,49 +15,21 @@ from pathlib import Path
 from typing import Optional
 
 from .adapters.base import PlatformAdapter
+from .states import (
+    DEFAULT_COVERAGE_THRESHOLD,
+    DEFAULT_FALLBACK_ANALYSIS_ROWS,
+    DEFAULT_MAX_DISCOVERY_ROUNDS,
+    DEFAULT_MAX_FIX_ROUNDS,
+    DEFAULT_MIN_DISCOVERY_ROUNDS,
+    PROGRESS_MAP as STATE_PROGRESS_MAP,
+    STATE_AGENTS,
+    STATE_TIMEOUTS,
+    VALID_STATES,
+)
+from .transitions.rules import next_state as compute_next_state
 from .validators import ArtifactValidator, ValidationResult
 
 logger = logging.getLogger("trendr.engine")
-
-
-# ── Constants ───────────────────────────────────────────────────────
-
-VALID_STATES = ("INIT", "DISCOVERY", "ANALYSIS", "GAP_CHECK", "WRITING", "VERIFY", "DONE")
-
-STATE_AGENTS = {
-    "INIT": "orchestrator",
-    "DISCOVERY": "paper-scout",
-    "ANALYSIS": "paper-analyzer",
-    "GAP_CHECK": "orchestrator",
-    "WRITING": "orchestrator",
-    "VERIFY": "verifier",
-    "DONE": "orchestrator",
-}
-
-# Default coverage threshold for GAP_CHECK → WRITING transition
-DEFAULT_COVERAGE_THRESHOLD = 0.7
-
-# Default max discovery rounds before forcing advancement
-DEFAULT_MAX_DISCOVERY_ROUNDS = 6
-
-# Default min discovery rounds before allowing early exit
-DEFAULT_MIN_DISCOVERY_ROUNDS = 1
-
-# Default max fix rounds (VERIFY → WRITING → VERIFY)
-DEFAULT_MAX_FIX_ROUNDS = 2
-
-# Agent timeouts per state
-STATE_TIMEOUTS = {
-    "INIT": 60,
-    "DISCOVERY": 900,
-    "ANALYSIS": 1200,
-    "GAP_CHECK": 300,
-    "WRITING": 1800,
-    "VERIFY": 600,
-    "DONE": 60,
-}
-
-DEFAULT_FALLBACK_ANALYSIS_ROWS = 20
 
 
 def _now_iso() -> str:
@@ -264,15 +236,7 @@ class ResearchStateMachine:
 
     # ── Progress tracking ───────────────────────────────────────────
 
-    PROGRESS_MAP = {
-        "INIT": (0, 5),
-        "DISCOVERY": (5, 40),
-        "ANALYSIS": (40, 75),
-        "GAP_CHECK": (75, 85),
-        "WRITING": (85, 97),
-        "VERIFY": (97, 99),
-        "DONE": (100, 100),
-    }
+    PROGRESS_MAP = STATE_PROGRESS_MAP
 
     def _write_progress(self, percent: int, phase: str, message: str) -> None:
         """Write human-readable progress.md."""
@@ -321,6 +285,22 @@ class ResearchStateMachine:
             f.write(line)
         logger.info(message)
 
+    def _log_agent_failure(self, label: str, result: dict) -> None:
+        """Record the most useful failure details from an adapter result."""
+        status = result.get("status", "unknown")
+        summary = (result.get("summary") or "").strip()
+        error = (result.get("error") or "").strip()
+        output = (result.get("output") or "").strip()
+
+        self._log(f"{label} failed with status={status}")
+        if summary:
+            self._log(f"{label} summary: {summary}")
+        if error:
+            self._log(f"{label} error: {error}")
+        if output:
+            first_line = output.splitlines()[0][:500]
+            self._log(f"{label} output: {first_line}")
+
     # ── Transition logic ────────────────────────────────────────────
 
     def transition(self, next_state: str, result: str = "ok", metrics: Optional[dict] = None) -> None:
@@ -359,19 +339,7 @@ class ResearchStateMachine:
         Returns:
             Next state name, or None if conditions not met.
         """
-        current = self.state["current_state"]
-        checkers = {
-            "INIT": self._check_init_exit,
-            "DISCOVERY": self._check_discovery_exit,
-            "ANALYSIS": self._check_analysis_exit,
-            "GAP_CHECK": self._check_gap_exit,
-            "WRITING": self._check_writing_exit,
-            "VERIFY": self._check_verify_exit,
-        }
-        checker = checkers.get(current)
-        if checker:
-            return checker()
-        return None
+        return compute_next_state(self)
 
     def _check_init_exit(self) -> Optional[str]:
         """INIT exits when run_state.json is valid and status is running."""
@@ -591,7 +559,10 @@ class ResearchStateMachine:
             f"run 'curl -fsS http://127.0.0.1:19222/json/version'. "
             f"If not running, run 'bash scripts/start-chrome-cdp.sh' or "
             f"'bash ~/.openclaw/workspace/scripts/start-chrome-cdp.sh'. "
-            f"Use --browser-profile cdp (not garry)."
+            f"For a fresh user/session, prefer "
+            f"'TRENDR_CDP_USER=<user-key> bash scripts/start-chrome-cdp.sh'. "
+            f"Browser commands MUST use --browser-profile cdp (not garry and never empty). "
+            f"If a site needs login, tell the user they can sign in once inside that dedicated agent Chrome."
         )
 
         self._update_progress("DISCOVERY", f"Scout searching (round {round_num})", 0.2)
@@ -603,6 +574,9 @@ class ResearchStateMachine:
         self._update_progress("DISCOVERY", f"Scout returned: {result.get('status', '?')}", 0.9)
         self.state["discovery_rounds"] = round_num
         self.save_state()
+
+        if result.get("status") != "completed":
+            self._log_agent_failure("paper-scout", result)
 
         return result.get("status") == "completed"
 
@@ -624,6 +598,8 @@ class ResearchStateMachine:
 
         self._update_progress("ANALYSIS", f"Analyzer returned: {result.get('status', '?')}", 0.9)
         analyzer_completed = result.get("status") == "completed"
+        if not analyzer_completed:
+            self._log_agent_failure("paper-analyzer", result)
 
         matrix_result = self.validator.validate_matrix_csv(self.matrix_path, self.candidates_path)
         notes_result = self.validator.validate_notes_dir(self.notes_dir, min_count=1)
@@ -667,6 +643,8 @@ class ResearchStateMachine:
         result = self.adapter.await_agent(handle)
 
         self._update_progress("GAP_CHECK", f"Gap check: {result.get('status', '?')}", 0.9)
+        if result.get("status") != "completed":
+            self._log_agent_failure("review-lead", result)
         return result.get("status") == "completed"
 
     def _exec_writing(self) -> bool:
@@ -697,6 +675,8 @@ class ResearchStateMachine:
         result = self.adapter.await_agent(handle)
 
         self._update_progress("WRITING", f"Writing: {result.get('status', '?')}", 0.9)
+        if result.get("status") != "completed":
+            self._log_agent_failure("review-lead", result)
         return result.get("status") == "completed"
 
     def _exec_verify(self) -> bool:
@@ -720,6 +700,7 @@ class ResearchStateMachine:
 
         self._update_progress("VERIFY", f"Verify: {result.get('status', '?')}", 0.9)
         if result.get("status") != "completed":
+            self._log_agent_failure("verifier", result)
             return False
 
         return self._write_deterministic_verify(run_id=run_id)
@@ -880,59 +861,75 @@ class ResearchStateMachine:
         existing.extend(error_entries)
         self.save_state()
 
-    # ── Main loop ───────────────────────────────────────────────────
+    # ── Coordinator loop ────────────────────────────────────────────
+
+    def step(self) -> dict:
+        """Execute a single state-machine coordination step."""
+        if self.state is None:
+            loaded = self.load_state()
+            if loaded is None:
+                raise RuntimeError("No run_state.json found. Call initialize() first.")
+
+        if self.state["current_state"] == "DONE" or self.state["status"] != "running":
+            return self.state
+
+        current = self.state["current_state"]
+        self._update_budget_flag()
+
+        success = self.execute_current()
+        if not success:
+            resume = self.check_resume_request()
+            if resume:
+                self._log(f"Retrying {current} after resume request")
+                return self.state
+
+            self._log(f"State {current} failed. Marking run as failed.")
+            self.state["status"] = "failed"
+            self.state["finished_at"] = _now_iso()
+            self.save_state()
+            return self.state
+
+        next_state = self.check_transition()
+        if next_state:
+            metrics = self._collect_metrics(current)
+            self.transition(next_state, result="ok", metrics=metrics)
+            if next_state == "DONE":
+                self.execute_current()  # finalize
+            return self.state
+
+        self._log_transition_failure()
+        self._log(f"State {current} executed but transition conditions not met")
+        self.state["status"] = "failed"
+        self.state["finished_at"] = _now_iso()
+        self.save_state()
+        return self.state
 
     def run(self) -> dict:
-        """Main execution loop. Blocks until DONE or failure.
-
-        Returns:
-            Final run_state dict.
-        """
+        """Run until completion or failure."""
         if self.state is None:
             loaded = self.load_state()
             if loaded is None:
                 raise RuntimeError("No run_state.json found. Call initialize() first.")
 
         self._log(f"State machine starting from {self.state['current_state']}")
-
         while self.state["current_state"] != "DONE" and self.state["status"] == "running":
-            current = self.state["current_state"]
-            self._update_budget_flag()
-
-            # Execute current state
-            success = self.execute_current()
-
-            if not success:
-                # Check if we got a resume request (watchdog intervention)
-                resume = self.check_resume_request()
-                if resume:
-                    self._log(f"Retrying {current} after resume request")
-                    continue
-
-                self._log(f"State {current} failed. Marking run as failed.")
-                self.state["status"] = "failed"
-                self.state["finished_at"] = _now_iso()
-                self.save_state()
-                break
-
-            # Check transition
-            next_state = self.check_transition()
-            if next_state:
-                metrics = self._collect_metrics(current)
-                self.transition(next_state, result="ok", metrics=metrics)
-
-                if next_state == "DONE":
-                    self.execute_current()  # finalize
-            else:
-                # No transition possible — execution succeeded but artifacts not ready
-                self._log_transition_failure()
-                self._log(f"State {current} executed but transition conditions not met")
-                self.state["status"] = "failed"
-                self.state["finished_at"] = _now_iso()
-                self.save_state()
-                break
-
+            self.step()
         return self.state
+
+    def resume(self) -> dict:
+        """Resume from existing run_state.json."""
+        loaded = self.load_state()
+        if loaded is None:
+            raise RuntimeError("No run_state.json found. Nothing to resume.")
+
+        if self.state.get("status") == "completed":
+            return self.state
+
+        self.state["status"] = "running"
+        self.state["heartbeat_at"] = _now_iso()
+        self.save_state()
+        self._log(f"Resuming from state: {self.state['current_state']}")
+        return self.run()
 
     def _select_fallback_analysis_rows(self) -> list[dict]:
         """Select candidate rows for minimal analysis fallback outputs."""

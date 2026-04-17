@@ -72,7 +72,8 @@ openclaw browser --browser-profile cdp close "$TAB_ID"
 ## Preflight
 
 Chrome 146 requires a non-default user-data-dir for `--remote-debugging-port`.
-We use `~/.openclaw/browser/cdp-automation` with cookies synced from a real Chrome profile. See `chrome-cdp-setup` skill for full architecture details.
+We use `~/.openclaw/browser/cdp-users/<user-key>` for new users (legacy default may still use `~/.openclaw/browser/cdp-automation`) with cookies synced from a real Chrome profile. See `chrome-cdp-setup` skill for full architecture details.
+If this is a fresh user/session, first start a dedicated store such as `TRENDR_CDP_USER=<user-key> bash ~/.openclaw/workspace/scripts/start-chrome-cdp.sh`, then tell the user they can sign in to the sites they want TrendR to query later.
 
 1. Launch the automation Chrome (syncs cookies automatically, skips if already running):
 

@@ -79,8 +79,12 @@ academic paper [QUERY] site:arxiv.org OR site:semanticscholar.org OR site:openal
 前置条件：
 1. 检查 Chrome CDP 是否已启动：`exec: curl -fsS http://127.0.0.1:19222/json/version`
 2. 如果未启动，先执行：`exec: bash scripts/start-chrome-cdp.sh` 或 `exec: bash ~/.openclaw/workspace/scripts/start-chrome-cdp.sh`
+   - 现有本地用户默认继续复用 legacy `19222 + cdp-automation`
+   - 新用户/新会话建议先用：`exec: TRENDR_CDP_USER=<user-key> bash scripts/start-chrome-cdp.sh`
 3. 确认返回 `ready:19222` 后再继续
 4. 浏览器兜底只用于临时提取结果，不保留学术站页面；抓取完成后必须关闭当前 tab
+5. 所有浏览器调用都必须显式带 `profile: cdp`；不允许空 profile 调用
+6. 如果需要登录 Google Scholar / X / arXiv 等站点，提醒用户在 dedicated agent Chrome 里先登录一次，后续运行复用同一套 CDP store
 
 用 browser 工具搜索（profile 必须是 `cdp`，不是旧 profile）：
 
@@ -341,7 +345,7 @@ web_fetch: { url: "https://paperswithcode.com/api/v1/papers/[PAPER_ID]/repositor
 ```
 
 **browser（JS 重页面兜底）：**
-当 web_fetch 返回乱码或空内容时（Google Scholar 等），用 `browser --profile cdp` 工具（必须使用 `cdp` profile，不是默认 profile）。
+当 web_fetch 返回乱码或空内容时（Google Scholar 等），用 `browser --profile cdp` 工具（必须使用 `cdp` profile，不是默认 profile，也不允许空 profile）。
 如果 browser 报错 `profile not running`，先执行 `bash scripts/start-chrome-cdp.sh` 或 `bash ~/.openclaw/workspace/scripts/start-chrome-cdp.sh`。
 如果用 OpenClaw 原生命令抓取，按 `open -> evaluate -> close` 执行；不要让学术站搜索页长期停留不关。
 

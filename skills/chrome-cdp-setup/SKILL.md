@@ -43,7 +43,7 @@ The solution is two Chrome instances side by side:
 | Instance | Purpose | user-data-dir | Debug Port | Profile |
 |----------|---------|---------------|------------|---------|
 | **Daily Chrome** | User's normal browsing | `~/Library/Application Support/Google/Chrome` (default) | None | All user profiles |
-| **Automation Chrome** | CDP automation | `~/.openclaw/browser/cdp-automation` (custom) | 19222 | Default only (cookies synced from real profile) |
+| **Automation Chrome** | CDP automation | `~/.openclaw/browser/cdp-users/<user-key>` (recommended) or legacy `~/.openclaw/browser/cdp-automation` | 19222 | Default only (cookies synced from real profile) |
 
 Both appear in the macOS Dock. They can run simultaneously because they use different `user-data-dir` paths.
 
@@ -51,7 +51,7 @@ Both appear in the macOS Dock. They can run simultaneously because they use diff
 
 The automation Chrome uses a custom `user-data-dir` but needs login sessions from the real profile. macOS Chrome encrypts cookies using a keychain entry (`Chrome Safe Storage`) that is **per-application, not per-user-data-dir**. This means copied cookies decrypt correctly in the custom directory.
 
-Synced files (from source profile to `cdp-automation/Default`):
+Synced files (from source profile to the dedicated automation store under `Default/`):
 
 | File/Directory | What it carries |
 |----------------|-----------------|
@@ -75,11 +75,21 @@ Location: `~/.openclaw/workspace/scripts/start-chrome-cdp.sh`
 bash ~/.openclaw/workspace/scripts/start-chrome-cdp.sh
 ```
 
+This default path keeps existing local users on the legacy `19222 + ~/.openclaw/browser/cdp-automation` setup.
+
+Per-user isolation for a fresh user:
+
+```bash
+TRENDR_CDP_USER=<user-key> bash ~/.openclaw/workspace/scripts/start-chrome-cdp.sh
+```
+
 - Syncs cookies from real profile before launch (calls `sync-chrome-profile.sh`)
 - Launches Chrome with `--remote-debugging-port=19222` and custom user-data-dir
+- Existing local users keep the legacy `~/.openclaw/browser/cdp-automation` store
+- New users should get a dedicated store under `~/.openclaw/browser/cdp-users/<user-key>`
 - Idempotent: exits with `already_listening:19222` if Chrome is already up
 - Waits up to 10s for CDP endpoint to be ready
-- Configurable via env vars: `TRENDR_CDP_PORT`, `TRENDR_CDP_DATADIR`, `TRENDR_CHROME_PROFILE`
+- Configurable via env vars: `TRENDR_CDP_PORT`, `TRENDR_CDP_DATADIR`, `TRENDR_CHROME_PROFILE`, `TRENDR_CDP_USER`
 
 ### stop-chrome-cdp.sh
 
@@ -96,7 +106,7 @@ bash ~/.openclaw/workspace/scripts/stop-chrome-cdp.sh
 bash ~/.openclaw/workspace/scripts/sync-chrome-profile.sh
 ```
 
-- Copies auth/session files from a real Chrome profile to `cdp-automation/Default`
+- Copies auth/session files from a real Chrome profile to the active automation store's `Default/`
 - Auto-detects the first non-Default profile, or specify: `sync-chrome-profile.sh "Profile 1"`
 - Called automatically by `start-chrome-cdp.sh`
 - Run manually if cookies become stale (sites show logged out)
@@ -124,8 +134,10 @@ Key points:
 - Only ONE browser profile (`cdp`). Do not add `user` / `openclaw` / `existing-session` profiles.
 - Transport is `cdp` (direct WebSocket), NOT `existing-session` (which triggers the popup).
 - `attachOnly: true` — never launch Chrome automatically; always use the start script.
+- Browser calls must always include `--browser-profile cdp`; never use an empty browser profile.
+- Tell the user they can sign in inside the dedicated agent Chrome to the sites they want TrendR to read later.
 
-## Profile Hygiene for cdp-automation
+## Profile Hygiene for the Automation Store
 
 The custom `user-data-dir` should contain only a single `Default` profile. If extra profiles appear (from a stale `Local State` copy), clean them:
 

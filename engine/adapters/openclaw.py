@@ -4,7 +4,7 @@ Maps state machine operations to OpenClaw primitives:
     spawn_agent  → sessions_spawn + sessions_yield
     http_get     → web_fetch
     run_shell    → exec:
-    browser_eval → openclaw browser --profile cdp eval "..."
+    browser_eval → openclaw browser --browser-profile cdp eval "..."
     read_file    → read
     write_file   → write
 
@@ -46,6 +46,12 @@ class OpenClawAdapter(PlatformAdapter):
         session_id: OpenClaw session ID (for CLI mode agent injection)
     """
 
+    AGENT_ERROR_MARKERS = (
+        "authentication_error",
+        "invalid api key",
+        "unknown agent id",
+        "permission denied",
+    )
     def __init__(
         self,
         mode: str = "instruction",
@@ -62,6 +68,50 @@ class OpenClawAdapter(PlatformAdapter):
     @property
     def platform_name(self) -> str:
         return "openclaw"
+
+    @classmethod
+    def _extract_payload_text(cls, parsed: Optional[dict]) -> str:
+        if not isinstance(parsed, dict):
+            return ""
+
+        payloads = parsed.get("result", {}).get("payloads", [])
+        texts = [
+            payload.get("text", "")
+            for payload in payloads
+            if isinstance(payload, dict) and payload.get("text")
+        ]
+        return "\n".join(texts).strip()
+
+    @classmethod
+    def _result_stop_reason(cls, parsed: Optional[dict]) -> str:
+        if not isinstance(parsed, dict):
+            return ""
+
+        result = parsed.get("result", {})
+        completion = result.get("completion", {}) if isinstance(result, dict) else {}
+        stop_reason = (
+            result.get("stopReason")
+            or completion.get("stopReason")
+            or completion.get("finishReason")
+            or ""
+        )
+        return str(stop_reason).strip().lower()
+
+    @classmethod
+    def _looks_like_agent_error(cls, parsed: Optional[dict], output_text: str) -> bool:
+        stop_reason = cls._result_stop_reason(parsed)
+        if stop_reason in {"error", "failed", "aborted"}:
+            return True
+
+        normalized = output_text.strip().lower()
+        if not normalized:
+            return False
+
+        if any(marker in normalized for marker in cls.AGENT_ERROR_MARKERS):
+            return True
+
+        first_line = normalized.splitlines()[0]
+        return first_line.startswith("error:") or first_line.startswith("http 4") or first_line.startswith("http 5")
 
     # ── Agent lifecycle ─────────────────────────────────────────────
 
@@ -114,23 +164,26 @@ class OpenClawAdapter(PlatformAdapter):
                     except json.JSONDecodeError:
                         parsed = None
 
-                payload_text = ""
-                if isinstance(parsed, dict):
-                    payloads = parsed.get("result", {}).get("payloads", [])
-                    texts = [
-                        p.get("text", "")
-                        for p in payloads
-                        if isinstance(p, dict) and p.get("text")
-                    ]
-                    payload_text = "\n".join(texts).strip()
+                payload_text = self._extract_payload_text(parsed)
 
                 summary = parsed.get("summary") if isinstance(parsed, dict) else None
                 status = parsed.get("status") if isinstance(parsed, dict) else None
+                output_text = payload_text or result.stdout
+                looks_like_agent_error = self._looks_like_agent_error(parsed, output_text)
+                agent_status = (
+                    "completed"
+                    if result.returncode == 0 and status == "ok" and not looks_like_agent_error
+                    else "failed"
+                )
+                error_text = result.stderr
+                if agent_status != "completed" and not error_text.strip() and looks_like_agent_error:
+                    error_text = output_text
+
                 self._pending_agents[handle] = {
                     "agent_id": agent_id,
-                    "status": "completed" if result.returncode == 0 and status == "ok" else "failed",
-                    "output": payload_text or result.stdout,
-                    "error": result.stderr,
+                    "status": agent_status,
+                    "output": output_text,
+                    "error": error_text,
                     "summary": summary,
                     "raw": parsed if parsed is not None else result.stdout,
                 }
@@ -261,9 +314,12 @@ class OpenClawAdapter(PlatformAdapter):
 
     def browser_eval(self, js: str, url: Optional[str] = None) -> str:
         if self.mode == "instruction":
-            cmd = f"openclaw browser --profile {self.browser_profile}"
+            cmd = f"openclaw browser --browser-profile {self.browser_profile}"
             if url:
-                cmd += f" navigate {shlex.quote(url)} && openclaw browser --profile {self.browser_profile}"
+                cmd += (
+                    f" navigate {shlex.quote(url)} && "
+                    f"openclaw browser --browser-profile {self.browser_profile}"
+                )
             cmd += f" eval {shlex.quote(js)}"
             return json.dumps({"tool": "exec", "command": cmd})
 
@@ -272,7 +328,7 @@ class OpenClawAdapter(PlatformAdapter):
             outputs = []
             if url:
                 nav = subprocess.run(
-                    ["openclaw", "browser", "--profile", self.browser_profile, "navigate", url],
+                    ["openclaw", "browser", "--browser-profile", self.browser_profile, "navigate", url],
                     capture_output=True,
                     text=True,
                     timeout=30,
@@ -283,7 +339,7 @@ class OpenClawAdapter(PlatformAdapter):
                     outputs.append(nav.stdout.strip())
 
             result = subprocess.run(
-                ["openclaw", "browser", "--profile", self.browser_profile, "eval", js],
+                ["openclaw", "browser", "--browser-profile", self.browser_profile, "eval", js],
                 capture_output=True,
                 text=True,
                 timeout=30,

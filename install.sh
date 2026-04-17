@@ -508,6 +508,47 @@ else:
 PYEOF
 }
 
+_ensure_agent_entry() {
+    local agent_id="$1"
+    local agent_name="$2"
+    local workspace_path="$3"
+    python3 - "$OC_JSON" "$agent_id" "$agent_name" "$workspace_path" << 'PYEOF'
+import json, sys
+
+path, agent_id, agent_name, workspace = sys.argv[1:5]
+with open(path) as f:
+    c = json.load(f)
+
+agents = c.setdefault('agents', {}).setdefault('list', [])
+target = next((a for a in agents if a.get('id') == agent_id), None)
+changed = False
+
+if target is None:
+    agents.append({
+        'id': agent_id,
+        'name': agent_name,
+        'workspace': workspace,
+    })
+    changed = True
+    print(f'  added agent: {agent_id}')
+else:
+    if not target.get('name'):
+        target['name'] = agent_name
+        changed = True
+    if not target.get('workspace'):
+        target['workspace'] = workspace
+        changed = True
+    if changed:
+        print(f'  updated agent: {agent_id}')
+    else:
+        print(f'  already registered: {agent_id}')
+
+if changed:
+    with open(path, 'w') as f:
+        json.dump(c, f, indent=2, ensure_ascii=False)
+PYEOF
+}
+
 _ensure_agent_tool() {
     local agent_id="$1"
     local tool_name="$2"
@@ -534,6 +575,10 @@ PYEOF
 
 BASE_SKILLS="paper-scout paper-analyzer review-writer verifier research-vault trendr-watchdog chrome-cdp-setup platform-hotspots arxiv-watcher summarize agent-browser"
 for sk in $BASE_SKILLS; do _ensure_skill "$sk"; done
+_ensure_agent_entry "paper-scout" "Paper Scout" "$WORKSPACE"
+_ensure_agent_entry "paper-analyzer" "Paper Analyzer" "$WORKSPACE"
+_ensure_agent_entry "review-lead" "Review Lead" "$WORKSPACE"
+_ensure_agent_entry "verifier" "Verifier" "$WORKSPACE"
 _ensure_agent_tool "review-lead" "sessions_yield"
 
 if [ "$INSTALL_MODE" = "full" ]; then
