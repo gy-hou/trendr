@@ -309,3 +309,124 @@ python3 cli.py resume ~/research/marl-trading-2026-04-17 --platform claude-code
 - `scripts/start-chrome-cdp.sh` — CDP 启动（含 `--remote-allow-origins=*`）
 - `scripts/cdp_browse.py` — 统一 CDP 浏览器采集入口
 - `docs/CLAUDE_CODE_ADAPTER.md` — dispatch-completion 协议详解
+
+---
+
+# TrendR 能力上限分析
+
+> 针对给定研究命题，当前链路在轮数、时间、网页访问量、论文收集量、知识库输出五个维度的实测上限。
+
+## A. 三档深度 × 五个维度
+
+| 维度 | Depth A（轻量） | Depth B（标准） | Depth C（深度） | 硬上限来源 |
+|------|----------------|----------------|----------------|-----------|
+| **Discovery 轮数** | 2–3 轮 | 2–6 轮 | 3–6 轮（⚠️ 状态机硬限） | `DEFAULT_MAX_DISCOVERY_ROUNDS = 6` |
+| **总壁钟时间** | ~1.2 小时 | ~2.5 小时 | ~5 小时 | 各 state 超时累加 |
+| **访问页面数** | 60–90 次 | 120–200 次 | 200–400 次 | 源数量 × 轮数 × 每源请求数 |
+| **收集候选论文** | 100–180 篇 | 200–400 篇 | 400–650 篇（去重后） | 9 源 × 每源 20 条 × 轮数 |
+| **实际分析论文** | 20–30 篇 | 30–45 篇 | 50–80 篇 | `target_papers` 卡口 + score≥4 过滤 |
+
+## B. 时间上限拆解（Depth C 最坏场景）
+
+```
+INIT                       :    1 分钟
+DISCOVERY × 6 轮           :   90 分钟  (每轮 15 min × 6)
+ANALYSIS  × 6 轮           :  120 分钟  (每轮 20 min × 6)
+GAP_CHECK × 6 轮           :   30 分钟  (每轮  5 min × 6)
+WRITING                    :   30 分钟
+VERIFY + 2 次修复循环       :   30 分钟  (10 min × 3)
+─────────────────────────────────────────────────────
+单次运行理论上限             :  301 分钟 ≈ 5 小时
+
+加 Watchdog 最多 12 次 resume（每次从中断点续跑）：
+绝对上限                    :  60 小时（连续隔天续跑场景）
+```
+
+## C. 网页访问量拆解
+
+每轮 Discovery 的访问结构：
+
+```
+API 类（arXiv / S2 / OpenAlex / DBLP）：  1–2 req/源 × 5 源 = ~8 次
+CDP 类（HF Papers / Zhihu / X）：         每源 1 次页面加载 = ~3 次
+论文摘要/全文补充抓取（Analysis 阶段）：  每篇分析 ~1–2 次 = 50–160 次
+─────────────────────────────────────────────────────────────────
+每轮小计：约 60–170 次
+```
+
+| 深度 | 轮数 | 每轮访问 | 总访问上限 |
+|------|------|----------|-----------|
+| A | 3 | 60–90 | **180–270 次** |
+| B | 6 | 80–120 | **480–720 次** |
+| C | 6 | 100–170 | **600–1020 次** |
+
+## D. 论文收集漏斗
+
+```
+原始抓取（9 源 × 20条 × 6轮）            ≈ 1080 条
+        ↓  去重（arXiv ID / DOI / 标题 90% 相似）约去掉 40%
+candidates.csv                            ≈  650 条
+        ↓  relevance_score ≥ 4 过滤（约 15–25%）
+高相关候选                                ≈  100–160 篇
+        ↓  target_papers 上限（Depth C = 80）
+实际生成 notes/                           ≈   80 篇
+        ↓  验证通过 + 被引用
+进入 review.md 正文                       ≈   40–60 篇
+```
+
+**关键比例**：采集能力（650 篇）÷ 分析能力（80 篇）= **8×** 的过滤比，大量高相关论文在漏斗中被丢弃。
+
+## E. Obsidian / Zotero 知识库上限
+
+**当前已实现：**
+
+| 输出物 | 数量上限/run | 累积上限 | 说明 |
+|--------|------------|---------|------|
+| `papers/*.md` Obsidian 卡片 | 80 张 | 无上限（多次运行累积） | Wikilinks 自动建图 |
+| `paper-pool.csv` 全局索引 | 单次 650 条 | 数千条（跨项目累积） | 按 paper_id 去重 |
+| `reviews/[topic]/review.md` | 1 份 | 每个 topic 1 份 | 含 40–60 篇引用 |
+| `references.bib` | 80 条目 | 每个 topic 1 份 | 可直接导入 Zotero |
+
+**Zotero 集成现状：**
+
+| 功能 | 状态 |
+|------|------|
+| `references.bib` 生成（手动导入） | ✅ 已实现 |
+| Zotero 本地 API 自动写入（port 23119） | ❌ Stub |
+| Obsidian 文件系统写入 | ✅ 已实现 |
+| Obsidian REST Plugin API 调用 | ❌ 未实现 |
+
+**实际可用路径**：`references.bib` → 手动导入 Zotero → Better BibTeX 插件 → Obsidian Zotero Integration 双向同步。
+
+## F. 当前链路三个关键断点
+
+**断点 1：分析能力 ≪ 收集能力**
+- 采集上限 650 篇 → 分析上限 80 篇，差距 8×
+- score 3–4 的论文（~500 篇）直接丢弃，没有二级索引
+
+**断点 2：Depth C 轮数冲突**
+- `cli.py` 允许 `--max-rounds 10`，但 `state_machine.py` 硬编码 `DEFAULT_MAX_DISCOVERY_ROUNDS = 6`
+- Depth C 的 10 轮设计在当前代码下无法触达
+
+**断点 3：Zotero 是 Stub，知识"网"缺失**
+- `references.bib` 已生成，需手动导入
+- `paper-pool.csv` 跨项目索引存在但无可视化
+- 论文"库"有了，节点间关系网络（共引、主题聚类）没有
+
+## G. 上限总结
+
+| 指标 | 实际可达上限 | 理论绝对上限 | 限制来源 |
+|------|------------|------------|---------|
+| Discovery 轮数 | **6 轮** | 12 轮（×resume） | 状态机硬编码 |
+| 单次运行时长 | **~5 小时** | 60 小时（12 resume） | state timeout 累积 |
+| 页面访问量 | **600–1000 次** | ~2000 次 | 轮数 × 源数 |
+| 候选论文池 | **650 篇** | ~1000 篇（增加轮数） | 去重后收敛 |
+| 实际分析论文 | **80 篇**（Depth C） | 80 篇（target_papers 卡口） | CLI 配置值 |
+| Obsidian 节点 | **80 张/run**，累积无上限 | 累积数千（多次运行） | 磁盘空间 |
+| Zotero 同步 | **手动导入 .bib** | 自动同步（需实现） | Stub |
+
+## H. 突破上限优先级
+
+1. **修复 Depth C 轮数冲突**：`state_machine.py` 从 `run_state` 读取 `max_discovery_rounds`，不硬编码
+2. **论文二级索引**：score 3–4 的 ~500 篇写入 `paper-pool.csv` 但不生成 notes，留给后续 `/tr resume` 按需深挖
+3. **Zotero 本地 API 对接**：10 行脚本 POST `references.bib` 到 `localhost:23119`，配合 Obsidian Zotero Integration 形成双向知识网络
