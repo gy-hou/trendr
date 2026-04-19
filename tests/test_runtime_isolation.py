@@ -1,4 +1,4 @@
-"""Tests that the two runtimes don't cross-contaminate each other's files."""
+"""Tests that runtimes don't cross-contaminate each other's files."""
 
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ import pytest
 REPO = Path(__file__).resolve().parents[1]
 
 OPENCLAW_INSTALLER = REPO / "runtimes" / "openclaw" / "install.sh"
+CODEX_INSTALLER = REPO / "runtimes" / "codex" / "install.sh"
 CC_INSTALLER = REPO / "runtimes" / "claude-code" / "install.sh"
 
 
@@ -58,6 +59,24 @@ def test_claude_code_installer_no_openclaw_refs(forbidden):
     )
 
 
+@pytest.mark.parametrize(
+    "forbidden",
+    [
+        ".claude/",
+        "~/.openclaw",
+        "openclaw browser",
+        "claude-code.md",
+    ],
+)
+def test_codex_installer_no_other_runtime_refs(forbidden):
+    if not CODEX_INSTALLER.exists():
+        pytest.skip("runtimes/codex/install.sh not present")
+    text = CODEX_INSTALLER.read_text(encoding="utf-8")
+    assert forbidden not in text, (
+        f"runtimes/codex/install.sh references non-Codex artefact: {forbidden!r}"
+    )
+
+
 # ---------------------------------------------------------------------------
 # Claude Code exclusive files must not appear inside runtimes/openclaw/
 # ---------------------------------------------------------------------------
@@ -82,7 +101,7 @@ def test_openclaw_supervisor_py_preserved():
 
 
 # ---------------------------------------------------------------------------
-# Each skill has both SKILL.md (shared) and claude-code.md (CC specific)
+# Each skill has shared knowledge plus runtime-specific siblings
 # ---------------------------------------------------------------------------
 
 
@@ -99,10 +118,11 @@ def test_openclaw_supervisor_py_preserved():
         "chrome-cdp-setup",
     ],
 )
-def test_each_skill_has_shared_and_cc_sibling(skill_name):
+def test_each_skill_has_shared_and_runtime_siblings(skill_name):
     skill_dir = REPO / "skills" / skill_name
     assert (skill_dir / "SKILL.md").exists(), f"{skill_name}/SKILL.md missing"
     assert (skill_dir / "claude-code.md").exists(), f"{skill_name}/claude-code.md missing"
+    assert (skill_dir / "codex.md").exists(), f"{skill_name}/codex.md missing"
 
 
 # ---------------------------------------------------------------------------

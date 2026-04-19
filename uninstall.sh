@@ -18,6 +18,7 @@ DRY_RUN=0
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --openclaw)    mode="openclaw";    shift ;;
+        --codex)       mode="codex";       shift ;;
         --claude-code) mode="claude-code"; shift ;;
         --all)         mode="all";         shift ;;
         --user)        scope="user";       shift ;;
@@ -25,11 +26,12 @@ while [[ $# -gt 0 ]]; do
         --dry-run)     DRY_RUN=1;          shift ;;
         -h|--help)
             cat << EOF
-Usage: ./uninstall.sh [--openclaw|--claude-code|--all] [--user|--project] [--dry-run]
+Usage: ./uninstall.sh [--openclaw|--codex|--claude-code|--all] [--user|--project] [--dry-run]
 
   --openclaw    Uninstall OpenClaw runtime files
+  --codex       Uninstall Codex runtime files
   --claude-code Uninstall Claude Code runtime files
-  --all         Uninstall both runtimes
+  --all         Uninstall all runtimes
   --user        (claude-code) target ~/.claude/ scope
   --project     (claude-code) target repo .claude/ scope (default)
   --dry-run     List actions without executing (claude-code only)
@@ -51,17 +53,19 @@ if [[ -z "$mode" ]]; then
     echo -e "  ${BOLD}Select runtime to uninstall:${NC}"
     echo ""
     echo -e "  ${GREEN}[1] OpenClaw${NC}    — remove agents & skills from ~/.openclaw/workspace/"
-    echo -e "  ${CYAN}[2] Claude Code${NC} — remove agent stubs & commands from .claude/"
-    echo -e "  ${BLUE}[3] All${NC}         — uninstall both runtimes"
+    echo -e "  ${BLUE}[2] Codex${NC}       — remove installed skills from \$CODEX_HOME/skills or ~/.codex/skills"
+    echo -e "  ${CYAN}[3] Claude Code${NC} — remove agent stubs & commands from .claude/"
+    echo -e "  ${YELLOW}[4] All${NC}       — uninstall all runtimes"
     echo -e "  ${RED}[q] Exit${NC}"
     echo ""
-    printf "  Enter choice [1/2/3/q] (default: 1): "
+    printf "  Enter choice [1/2/3/4/q] (default: 1): "
     read -r MENU_INPUT
 
     case "${MENU_INPUT:-1}" in
         1)   mode="openclaw"    ;;
-        2)   mode="claude-code" ;;
-        3)   mode="all"         ;;
+        2)   mode="codex"       ;;
+        3)   mode="claude-code" ;;
+        4)   mode="all"         ;;
         q|Q) echo ""; echo -e "${YELLOW}Cancelled.${NC}"; echo ""; exit 0 ;;
         *)   echo -e "${RED}Invalid choice.${NC}"; exit 1 ;;
     esac
@@ -75,12 +79,18 @@ case "$mode" in
     openclaw)
         bash "$SCRIPT_DIR/runtimes/openclaw/uninstall.sh"
         ;;
+    codex)
+        bash "$SCRIPT_DIR/runtimes/codex/uninstall.sh"
+        ;;
     claude-code)
         bash "$SCRIPT_DIR/runtimes/claude-code/uninstall.sh"
         ;;
     all)
         echo -e "${BOLD}── OpenClaw ─────────────────────────────────────────────────${NC}"
         bash "$SCRIPT_DIR/runtimes/openclaw/uninstall.sh"
+        echo ""
+        echo -e "${BOLD}── Codex ───────────────────────────────────────────────────${NC}"
+        bash "$SCRIPT_DIR/runtimes/codex/uninstall.sh"
         echo ""
         echo -e "${BOLD}── Claude Code ──────────────────────────────────────────────${NC}"
         bash "$SCRIPT_DIR/runtimes/claude-code/uninstall.sh"

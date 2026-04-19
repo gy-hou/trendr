@@ -105,7 +105,7 @@ python cli.py run --topic "RL multi-agent" --platform claude-code
 - SessionStart / Stop / SubagentStop hooks for resumable runs.
 
 ## Breaking
-- Runtime detection priority changed: `TRENDR_PLATFORM > CLAUDE_CODE_* > OPENCLAW_SESSION_ID > CODEX_* > cli`. If you rely on OpenClaw env alone, set `TRENDR_PLATFORM=openclaw` explicitly.
+- Runtime detection priority changed: `TRENDR_PLATFORM > OPENCLAW_SESSION_ID > CODEX_* > CLAUDE_CODE_* > cli`.
 
 ## Migration
 - OpenClaw users: no changes required, behaviour unchanged.

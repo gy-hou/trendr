@@ -89,17 +89,33 @@ Inspired by [karpathy/autoresearch](https://github.com/karpathy/autoresearch) â€
 | Use case | Runtime | Why |
 |----------|---------|-----|
 | Interactive research, ad-hoc queries | **Claude Code** â† recommended | Slash commands, subagents, SessionStart resume |
-| Embedded in a code project | **Codex** | Direct integration with code context |
+| Embedded in a code project | **Codex** | `skills/*/codex.md` + `agents/*/codex.md` integrate directly with code context |
 | Daily scheduled automation, unattended | **OpenClaw** | Stable cron + supervisor for long-running jobs |
 
-> All three share the same skill files (`skills/*/SKILL.md`) and state machine (`engine/`). The Runtime Router in each SKILL.md automatically puts non-active runtime blocks to sleep.
+> All three share the same knowledge files (`skills/*/SKILL.md`) and state machine (`engine/`); only the runtime-specific sibling files differ. The Runtime Router in each SKILL.md automatically puts non-active runtime blocks to sleep: OpenClaw reads `SKILL.md`, Claude Code reads `claude-code.md`, and Codex reads `codex.md`.
+
+## Runtime Authority Files
+
+TrendR's multi-runtime workflow is built around shared knowledge plus runtime-specific authority files, not one universal prompt:
+
+| Layer | OpenClaw | Claude Code | Codex |
+|-------|----------|-------------|-------|
+| Shared skill knowledge | `skills/*/SKILL.md` | `skills/*/SKILL.md` | `skills/*/SKILL.md` |
+| Runtime-specific skill instructions | in `SKILL.md` | `skills/*/claude-code.md` | `skills/*/codex.md` |
+| Shared agent contract | `agents/*/CONTRACT.md` | `agents/*/CONTRACT.md` | `agents/*/CONTRACT.md` |
+| Runtime-specific agent instructions | `agents/*/SOUL.md` | `agents/*/claude-code.md` | `agents/*/codex.md` |
+
+Auto-detection order:
+- explicit `--platform` / `TRENDR_PLATFORM` always wins
+- otherwise: `OPENCLAW_SESSION_ID > CODEX_* > CLAUDE_CODE_* > cli`
+- non-target runtime blocks must be treated as `dormant`
 
 ## Compatible Runtimes
 
 | Platform | Support | Best for |
 |----------|---------|----------|
 | **Claude Code** | **Primary (v2.1.0+)** | Interactive research; `/tr research`, `/tr hotspots`, resume |
-| **Codex** | Full | Code-project-embedded research; same install as Claude Code |
+| **Codex** | Full | Code-project-embedded research; install via `./install.sh --codex` |
 | **OpenClaw** | Full (legacy) | Daily cron automation; unattended overnight runs; browser CDP |
 | **Standalone CLI** | v2 engine | Scripted pipeline; `python cli.py run --topic "..." --platform cli` |
 | **Other agents** | Skills readable | `SKILL.md` is standard Markdown; API URLs are directly copyable |
@@ -109,7 +125,7 @@ Inspired by [karpathy/autoresearch](https://github.com/karpathy/autoresearch) â€
 Unified runtime contract:
 - canonical runtime: `claude-code` (primary), `openclaw`, `codex`, `cli`
 - alias: `claudecode -> claude-code`
-- detection priority: CLI `--platform` > `TRENDR_PLATFORM` > `CLAUDE_CODE_*` > `OPENCLAW_SESSION_ID` > `CODEX_*` > `cli`
+- detection priority: CLI `--platform` > `TRENDR_PLATFORM` > `OPENCLAW_SESSION_ID` > `CODEX_*` > `CLAUDE_CODE_*` > `cli`
 - each skill executes only the matching runtime block; non-target blocks are marked `dormant` and skipped
 
 ---
@@ -152,7 +168,7 @@ Then in Claude Code: `/tr research "your topic"`
 
 **Codex**
 ```bash
-./install.sh --claude-code        # same install, shared skills
+./install.sh --codex
 python3 cli.py run --topic "your topic" --platform codex
 ```
 
@@ -169,6 +185,24 @@ bash scripts/install-universal-skills.sh --runtime all --copy
 ```
 
 The installer shows a full component manifest before asking you to confirm. Nothing installs until you do.
+
+## Install Locations
+
+Each runtime installer writes to a different destination:
+
+| Runtime | Install command | Destination |
+|---------|-----------------|-------------|
+| Claude Code | `./install.sh --claude-code` | repo `.claude/` or `~/.claude/`, plus `.claude-plugin/` |
+| Codex | `./install.sh --codex` | `${CODEX_HOME:-~/.codex}/skills` |
+| OpenClaw | `./install.sh --openclaw` | `~/.openclaw/workspace/agents` and `~/.openclaw/workspace/skills` |
+
+Uninstall:
+
+```bash
+./uninstall.sh --claude-code
+./uninstall.sh --codex
+./uninstall.sh --openclaw
+```
 
 Custom Obsidian vault path (Full mode):
 
@@ -238,7 +272,11 @@ python cli.py status ~/research/agentic-rag-2025
 python cli.py resume ~/research/agentic-rag-2025
 ```
 
-Or in a Codex session read skills directly and call WebFetch/WebSearch tools.
+Or in a Codex session read:
+- `CODEX.md`
+- `skills/*/SKILL.md`
+- `skills/*/codex.md`
+- and `agents/*/codex.md` when you need agent-specific behavior
 
 ### OpenClaw (daily automation / unattended)
 

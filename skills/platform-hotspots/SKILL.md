@@ -23,9 +23,9 @@ metadata: {"openclaw": {}}
 
 - `openclaw`    → 本文件内原有指令块仍然有效（`openclaw browser --browser-profile cdp`）
 - `claude-code` → **跳过本文件的指令块**，读 `./claude-code.md` 获取 MCP chrome / WebFetch / WebSearch 调用方式
-- `codex` / `cli` → 参考 `./claude-code.md`（WebFetch / WebSearch 路径）
+- `codex` / `cli` → **跳过本文件的指令块**，读 `./codex.md` 获取 Codex `web` / `exec_command` / CDP 脚本调用方式
 
-本节之后的章节描述 **共享知识**（平台列表、字段契约、输出格式）。指令块保持现状（OpenClaw 语法），Claude Code 读者请切换到 `./claude-code.md`。
+本节之后的章节描述 **共享知识**（平台列表、字段契约、输出格式）。指令块保持现状（OpenClaw 语法），Claude Code 读者请切换到 `./claude-code.md`，Codex/CLI 读者请切换到 `./codex.md`。
 
 ## Multi-Platform Compatibility
 

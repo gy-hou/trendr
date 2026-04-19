@@ -20,9 +20,9 @@ metadata: {"openclaw": {}}
 
 - `openclaw`    → 本文件内原有指令块仍然有效（`supervisor.py` 注入模式）
 - `claude-code` → **跳过本文件的指令块**，读 `./claude-code.md` 获取 Claude Code hooks 驱动方式
-- `codex` / `cli` → 参考 `./claude-code.md`（file-based heartbeat 协议）
+- `codex` / `cli` → **跳过本文件的指令块**，读 `./codex.md` 获取 Codex file-based heartbeat 协议
 
-本节之后的章节描述 **共享知识**（检测逻辑、故障条件、heartbeat 协议）。指令块保持现状（OpenClaw 语法），Claude Code 读者请切换到 `./claude-code.md`。
+本节之后的章节描述 **共享知识**（检测逻辑、故障条件、heartbeat 协议）。指令块保持现状（OpenClaw 语法），Claude Code 读者请切换到 `./claude-code.md`，Codex/CLI 读者请切换到 `./codex.md`。
 
 ## Runtime Strategy
 

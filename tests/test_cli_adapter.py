@@ -225,6 +225,22 @@ class CLIAdapterTestCase(unittest.TestCase):
         self.assertIsInstance(adapter, CLIAdapter)
         self.assertEqual(adapter.platform_name, "codex")
 
+    def test_load_soul_prefers_codex_sibling_for_codex_runtime(self) -> None:
+        agent_dir = self.root / "agents" / "paper-scout"
+        (agent_dir / "codex.md").write_text("# Codex Prompt\n", encoding="utf-8")
+
+        adapter = CLIAdapter(repo_root=self.root, platform_name="codex")
+
+        self.assertEqual(adapter._load_soul("paper-scout"), "# Codex Prompt\n")
+
+    def test_load_soul_prefers_claude_code_sibling_for_claude_runtime(self) -> None:
+        agent_dir = self.root / "agents" / "paper-scout"
+        (agent_dir / "claude-code.md").write_text("# Claude Prompt\n", encoding="utf-8")
+
+        adapter = CLIAdapter(repo_root=self.root, platform_name="claude-code")
+
+        self.assertEqual(adapter._load_soul("paper-scout"), "# Claude Prompt\n")
+
     def test_get_adapter_normalizes_claudecode_alias(self) -> None:
         from engine.adapters.claude_code import ClaudeCodeAdapter
         adapter = trendr_cli.get_adapter("claudecode")
@@ -256,13 +272,25 @@ class CLIAdapterTestCase(unittest.TestCase):
         ):
             self.assertEqual(detect_runtime(os.environ), "openclaw")
 
-        # CLAUDE_CODE_* now takes priority over CODEX_*
+        # OPENCLAW_SESSION_ID takes priority over both CODEX_* and CLAUDE_CODE_*
+        with mock.patch.dict(
+            os.environ,
+            {
+                "OPENCLAW_SESSION_ID": "oc-123",
+                "CODEX_SHELL": "1",
+                "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
+            },
+            clear=True,
+        ):
+            self.assertEqual(detect_runtime(os.environ), "openclaw")
+
+        # CODEX_* takes priority over CLAUDE_CODE_*
         with mock.patch.dict(
             os.environ,
             {"CODEX_SHELL": "1", "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1"},
             clear=True,
         ):
-            self.assertEqual(detect_runtime(os.environ), "claude-code")
+            self.assertEqual(detect_runtime(os.environ), "codex")
 
         # CODEX_* alone (no CLAUDE_CODE_* keys) → codex
         with mock.patch.dict(

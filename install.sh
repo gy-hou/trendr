@@ -21,6 +21,7 @@ DRY_RUN=0
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --openclaw)    mode="openclaw";    shift ;;
+        --codex)       mode="codex";       shift ;;
         --claude-code) mode="claude-code"; shift ;;
         --all)         mode="all";         shift ;;
         --user)        scope="user";       shift ;;
@@ -28,11 +29,12 @@ while [[ $# -gt 0 ]]; do
         --dry-run)     DRY_RUN=1;          shift ;;
         -h|--help)
             cat << EOF
-Usage: ./install.sh [--openclaw|--claude-code|--all] [--user|--project] [--dry-run]
+Usage: ./install.sh [--openclaw|--codex|--claude-code|--all] [--user|--project] [--dry-run]
 
   --openclaw    Install for OpenClaw runtime (default interactive choice)
+  --codex       Install for Codex runtime
   --claude-code Install for Claude Code runtime
-  --all         Install for both runtimes
+  --all         Install for all runtimes
   --user        (claude-code) install into ~/.claude/ instead of repo .claude/
   --project     (claude-code) install into repo .claude/ (default)
   --dry-run     List actions without executing (claude-code only)
@@ -56,17 +58,19 @@ if [[ -z "$mode" ]]; then
     echo -e "  ${BOLD}Select runtime to install for:${NC}"
     echo ""
     echo -e "  ${CYAN}[1] Claude Code${NC} — install agent stubs & commands into .claude/ (default)"
-    echo -e "  ${GREEN}[2] OpenClaw${NC}    — install agents & skills into ~/.openclaw/workspace/ (legacy, still supported)"
-    echo -e "  ${BLUE}[3] All${NC}         — install for both runtimes"
+    echo -e "  ${BLUE}[2] Codex${NC}       — install skills into \$CODEX_HOME/skills or ~/.codex/skills"
+    echo -e "  ${GREEN}[3] OpenClaw${NC}   — install agents & skills into ~/.openclaw/workspace/ (legacy, still supported)"
+    echo -e "  ${YELLOW}[4] All${NC}       — install for all runtimes"
     echo -e "  ${RED}[q] Exit${NC}"
     echo ""
-    printf "  Enter choice [1/2/3/q] (default: 1): "
+    printf "  Enter choice [1/2/3/4/q] (default: 1): "
     read -r MENU_INPUT
 
     case "${MENU_INPUT:-1}" in
         1)   mode="claude-code" ;;
-        2)   mode="openclaw"    ;;
-        3)   mode="all"         ;;
+        2)   mode="codex"       ;;
+        3)   mode="openclaw"    ;;
+        4)   mode="all"         ;;
         q|Q) echo ""; echo -e "${YELLOW}Cancelled.${NC}"; echo ""; exit 0 ;;
         *)   echo -e "${RED}Invalid choice.${NC}"; exit 1 ;;
     esac
@@ -82,6 +86,11 @@ case "$mode" in
         echo ""
         bash "$SCRIPT_DIR/runtimes/openclaw/install.sh"
         ;;
+    codex)
+        echo -e "  ${BLUE}▶ Installing for Codex...${NC}"
+        echo ""
+        bash "$SCRIPT_DIR/runtimes/codex/install.sh"
+        ;;
     claude-code)
         echo -e "  ${CYAN}▶ Installing for Claude Code...${NC}"
         echo ""
@@ -92,6 +101,9 @@ case "$mode" in
         echo ""
         echo -e "${BOLD}── OpenClaw ─────────────────────────────────────────────────${NC}"
         bash "$SCRIPT_DIR/runtimes/openclaw/install.sh"
+        echo ""
+        echo -e "${BOLD}── Codex ───────────────────────────────────────────────────${NC}"
+        bash "$SCRIPT_DIR/runtimes/codex/install.sh"
         echo ""
         echo -e "${BOLD}── Claude Code ──────────────────────────────────────────────${NC}"
         bash "$SCRIPT_DIR/runtimes/claude-code/install.sh"

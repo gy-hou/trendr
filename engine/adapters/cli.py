@@ -63,10 +63,25 @@ class CLIAdapter(PlatformAdapter):
         )
 
     def _load_soul(self, agent_id: str) -> str:
-        soul_path = self.repo_root / "agents" / agent_id / "SOUL.md"
-        if not soul_path.exists():
-            raise RuntimeError(f"SOUL.md not found for agent '{agent_id}': {soul_path}")
-        return soul_path.read_text(encoding="utf-8")
+        agent_dir = self.repo_root / "agents" / agent_id
+        runtime_specific = {
+            "codex": "codex.md",
+            "claude-code": "claude-code.md",
+        }.get(self._platform_name)
+
+        candidates = []
+        if runtime_specific:
+            candidates.append(agent_dir / runtime_specific)
+        candidates.append(agent_dir / "SOUL.md")
+
+        for path in candidates:
+            if path.exists():
+                return path.read_text(encoding="utf-8")
+
+        raise RuntimeError(
+            f"No agent prompt found for '{agent_id}'. Tried: "
+            + ", ".join(str(path) for path in candidates)
+        )
 
     def _resolve_provider(self) -> str:
         """Resolve provider from env with required fallback behavior."""

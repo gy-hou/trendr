@@ -34,6 +34,11 @@ Before any research task, read the relevant skill file:
 - Platform hotspots: `skills/platform-hotspots/SKILL.md`
 - Chrome automation: `skills/chrome-cdp-setup/SKILL.md`
 
+Runtime-specific authority files:
+- `codex` → additionally read `CODEX.md`, `skills/*/codex.md`, `agents/*/codex.md`
+- `claude-code` → additionally read `CLAUDE.md`, `skills/*/claude-code.md`, `agents/*/claude-code.md`
+- `openclaw` → continue using `SKILL.md` + `SOUL.md`
+
 ## Agent Roles
 
 TrendR defines 4 agent roles. In multi-agent runtimes, dispatch them as subagents.
@@ -43,25 +48,25 @@ In single-agent runtimes (Codex), execute their responsibilities sequentially.
 - Reads: `skills/review-writer/SKILL.md`, `skills/trendr-watchdog/SKILL.md`
 - Coordinates the v2 state-machine pipeline
 - Writes the final review — never delegates writing
-- See: `agents/review-lead/SOUL.md`
+- See: `agents/review-lead/SOUL.md` / `agents/review-lead/codex.md` / `agents/review-lead/claude-code.md`
 
 ### paper-scout (Search)
 - Reads: `skills/paper-scout/SKILL.md`
 - Searches 3-5 academic APIs based on research domain
 - Outputs: `candidates.csv`, `search_log.md`
-- See: `agents/paper-scout/SOUL.md`
+- See: `agents/paper-scout/SOUL.md` / `agents/paper-scout/codex.md` / `agents/paper-scout/claude-code.md`
 
 ### paper-analyzer (Analysis)
 - Reads: `skills/paper-analyzer/SKILL.md`
 - Deep-reads papers with relevance >= 4
 - Outputs: `notes/*.md`, `matrix.csv`
-- See: `agents/paper-analyzer/SOUL.md`
+- See: `agents/paper-analyzer/SOUL.md` / `agents/paper-analyzer/codex.md` / `agents/paper-analyzer/claude-code.md`
 
 ### verifier (Verification)
 - Reads: `skills/verifier/SKILL.md`
 - Runs after WRITING in v2: citation existence, citation reality, claim support, coverage, taxonomy consistency, bib quality
 - Outputs: `verify.json`
-- See: `agents/verifier/SOUL.md`
+- See: `agents/verifier/SOUL.md` / `agents/verifier/codex.md` / `agents/verifier/claude-code.md`
 
 ## Engine Runtime
 

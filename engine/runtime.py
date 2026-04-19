@@ -32,9 +32,9 @@ def detect_runtime(env: Mapping[str, str] | None = None) -> str:
 
     Priority:
     1) TRENDR_PLATFORM           (explicit user override)
-    2) any CLAUDE_CODE_* env key (Claude Code — primary runtime)
-    3) OPENCLAW_SESSION_ID       (OpenClaw — legacy support)
-    4) any CODEX_* env key
+    2) OPENCLAW_SESSION_ID
+    3) any CODEX_* env key
+    4) any CLAUDE_CODE_* env key
     5) cli
     """
     source = env if env is not None else os.environ
@@ -42,13 +42,13 @@ def detect_runtime(env: Mapping[str, str] | None = None) -> str:
     if source.get("TRENDR_PLATFORM"):
         return normalize_runtime(source.get("TRENDR_PLATFORM"))
 
-    if any(k.startswith("CLAUDE_CODE_") for k in source):
-        return "claude-code"
-
     if source.get("OPENCLAW_SESSION_ID"):
         return "openclaw"
 
     if any(k.startswith("CODEX_") for k in source):
         return "codex"
+
+    if any(k.startswith("CLAUDE_CODE_") for k in source):
+        return "claude-code"
 
     return "cli"

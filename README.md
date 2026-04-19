@@ -133,11 +133,27 @@ See [`ROADMAP.md`](./ROADMAP.md).
 | 场景 | 推荐 Runtime | 理由 |
 |------|------------|------|
 | 对话式研究、随时提问 | **Claude Code** ← 推荐 | slash command、subagent、SessionStart 恢复 |
-| 代码项目内嵌研究 | **Codex** | 与代码上下文直接集成 |
+| 代码项目内嵌研究 | **Codex** | `skills/*/codex.md` + `agents/*/codex.md` 与代码上下文直接集成 |
 | 每日定时自动化、无人值守 | **OpenClaw** | cron + supervisor 长期运行稳定 |
 
-> 三者共用同一套技能文件（`skills/*/SKILL.md`）和状态机（`engine/`），只是驱动层不同。  
-> 每个 SKILL.md 内置 Runtime Router，自动休眠非当前 runtime 的指令块。
+> 三者共用同一套共享知识文件（`skills/*/SKILL.md`）和状态机（`engine/`），只是 runtime-specific sibling 不同。
+> 每个 SKILL.md 内置 Runtime Router，自动休眠非当前 runtime 的指令块：OpenClaw 读 `SKILL.md`，Claude Code 读 `claude-code.md`，Codex 读 `codex.md`。
+
+## Runtime 权威文件
+
+TrendR 这套多 runtime 工作流的关键，不是把一份 prompt 硬塞给所有宿主，而是分成“共享知识 + runtime-specific authority files”：
+
+| 层 | OpenClaw | Claude Code | Codex |
+|----|----------|-------------|-------|
+| Skill 共享知识 | `skills/*/SKILL.md` | `skills/*/SKILL.md` | `skills/*/SKILL.md` |
+| Skill runtime 指令 | 内嵌在 `SKILL.md` | `skills/*/claude-code.md` | `skills/*/codex.md` |
+| Agent 共享契约 | `agents/*/CONTRACT.md` | `agents/*/CONTRACT.md` | `agents/*/CONTRACT.md` |
+| Agent runtime 指令 | `agents/*/SOUL.md` | `agents/*/claude-code.md` | `agents/*/codex.md` |
+
+自动检测顺序：
+- 显式 `--platform` / `TRENDR_PLATFORM` 永远最高优先级
+- 否则按 `OPENCLAW_SESSION_ID > CODEX_* > CLAUDE_CODE_* > cli`
+- 非当前 runtime 的指令块必须视为 `dormant`
 
 ## Quick Start
 
@@ -160,11 +176,15 @@ cd trendr
 ### Codex（代码项目内嵌）
 
 ```bash
-./install.sh --claude-code        # 共用同一套安装
+./install.sh --codex              # 安装到 $CODEX_HOME/skills 或 ~/.codex/skills
 python3 cli.py run --topic "agentic RAG" --platform codex
 ```
 
-或在 Codex 会话中直接读取 `skills/*/SKILL.md` 调用对应工具。
+或在 Codex 会话中按如下顺序读取：
+- `CODEX.md`
+- `skills/*/SKILL.md`
+- `skills/*/codex.md`
+- 需要 agent 行为时再读 `agents/*/codex.md`
 
 ### OpenClaw（每日自动化 · 定时任务）
 
@@ -181,6 +201,24 @@ openclaw agent --agent review-lead --message "daily hotspots scan"
 - `--platform`：运行时（Claude Code 环境下自动检测，无需显式指定）
 
 See [`docs/USAGE.md`](./docs/USAGE.md).
+
+## 安装落点
+
+不同 runtime 的 installer 会写到不同位置：
+
+| Runtime | 安装命令 | 落点 |
+|---------|----------|------|
+| Claude Code | `./install.sh --claude-code` | 仓库 `.claude/` 或 `~/.claude/`，以及 `.claude-plugin/` |
+| Codex | `./install.sh --codex` | `${CODEX_HOME:-~/.codex}/skills` |
+| OpenClaw | `./install.sh --openclaw` | `~/.openclaw/workspace/agents` 与 `~/.openclaw/workspace/skills` |
+
+对应卸载：
+
+```bash
+./uninstall.sh --claude-code
+./uninstall.sh --codex
+./uninstall.sh --openclaw
+```
 
 ## Run Modes
 - `basic`：标准文献综述流水线入口（默认）。

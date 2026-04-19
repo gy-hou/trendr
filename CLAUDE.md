@@ -17,9 +17,9 @@ Alias normalization:
 Runtime detection priority:
 1. CLI explicit `--platform`
 2. `TRENDR_PLATFORM`
-3. any `CLAUDE_CODE_*` env key  ← primary runtime check
-4. `OPENCLAW_SESSION_ID`
-5. any `CODEX_*` env key
+3. `OPENCLAW_SESSION_ID`
+4. any `CODEX_*` env key
+5. any `CLAUDE_CODE_*` env key
 6. `cli`
 
 For every SKILL.md:

@@ -20,9 +20,9 @@ metadata: {"openclaw": {}}
 
 - `openclaw`    → 本文件内原有指令块仍然有效（`openclaw browser --browser-profile cdp`）
 - `claude-code` → **跳过本文件的指令块**，读 `./claude-code.md` 获取 MCP chrome server 安装和使用方式
-- `codex` / `cli` → 参考 `./claude-code.md`
+- `codex` / `cli` → **跳过本文件的指令块**，读 `./codex.md` 获取 Codex CDP / `scripts/cdp_browse.py` 使用方式
 
-本节之后的章节描述 **共享知识**（CDP 架构、Chrome 配置约束）。指令块保持现状（OpenClaw 语法），Claude Code 读者请切换到 `./claude-code.md`。
+本节之后的章节描述 **共享知识**（CDP 架构、Chrome 配置约束）。指令块保持现状（OpenClaw 语法），Claude Code 读者请切换到 `./claude-code.md`，Codex/CLI 读者请切换到 `./codex.md`。
 
 ## Core Constraint
 
