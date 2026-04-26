@@ -4,10 +4,10 @@
   <p align="center">Turn paper discovery, analysis, writing, and verification into a resumable, traceable control plane.</p>
   <p align="center">
     <a href="#what-trendr-is">What TrendR is</a> ·
+    <a href="#current-stack">Current stack</a> ·
+    <a href="#minimal-workflow">Minimal workflow</a> ·
+    <a href="#next-evolution">Next evolution</a> ·
     <a href="#core-capabilities">Core capabilities</a> ·
-    <a href="#workflow-vs-harness">Workflow vs Harness</a> ·
-    <a href="#reliability-and-engineering-proof">Reliability proof</a> ·
-    <a href="#optional-extensions">Optional extensions</a> ·
     <a href="#quick-start">Quick start</a>
   </p>
   <p align="center">
@@ -17,12 +17,12 @@
 
 ## 能力上限速览
 
-给定一个研究命题，当前链路的实测上限：
+给定一个研究命题，当前链路的配置上限与历史实测量级：
 
 | 指标 | 实际可达上限 | 理论绝对上限 | 限制来源 |
 |------|------------|------------|---------|
-| Discovery 轮数 | **6 轮** | 12 轮（×resume） | 状态机硬编码 |
-| 单次运行时长 | **~5 小时** | 60 小时（12 次 resume） | state timeout 累积 |
+| Discovery 轮数 | **A=3 / B=6 / C=10** | CLI 可覆写 | `DEPTH_PRESETS` + `run_state.params.max_rounds` |
+| 单次运行时长 | **~5 小时** | resume 后可继续 | state timeout + soft budget |
 | 页面访问量 | **600–1000 次** | ~2000 次 | 轮数 × 源数 |
 | 候选论文池 | **650 篇** | ~1000 篇 | 去重后收敛 |
 | 实际分析论文 | **80 篇**（Depth C） | 80 篇（target_papers 卡口） | CLI 配置值 |
@@ -32,15 +32,84 @@
 **当前链路三个关键断点：**
 
 - **分析能力 ≪ 收集能力**：采集上限 650 篇 → 分析上限 80 篇，差距 8×；score 3–4 的 ~500 篇直接丢弃，没有二级索引。
-- **Depth C 轮数冲突**：`cli.py` 允许 `--max-rounds 10`，但 `state_machine.py` 硬编码上限 6，10 轮设计无法触达。
+- **深挖配置已参数化，但策略仍粗**：Depth C 现在可从 `run_state` 读取 10 轮配置；下一步问题变成“哪些论文继续深挖”，而不是单纯增加轮数。
 - **Zotero 是 Stub，知识"网"缺失**：`references.bib` 已生成需手动导入；`paper-pool.csv` 跨项目索引存在但无可视化；论文"库"有了，节点间关系网络（共引、主题聚类）没有。
 
-详细拆解见 [`plan/future.md §能力上限分析`](./plan/future.md)。
+历史估算与长期方案见 [`plan/future.md`](./plan/future.md)；当前运行参数以 `cli.py` 和 `run_state.json` 为准。
 
 ---
 
 ## What TrendR is
 TrendR 是一个 **research-agent harness**，核心目标是把文献研究流程从一次性生成改造成可恢复、可追踪、可验证的控制面。
+
+## Current Stack
+
+当前版本是 **v2.1.0**，核心是一个零运行时依赖的 Python 控制面，外部模型、浏览器和知识库都通过 adapter / skill 边界接入。
+
+| 层 | 当前实现 | 说明 |
+|----|---------|------|
+| Core language | Python 3.10+ | `pyproject.toml` 中 engine core 无第三方运行时依赖 |
+| CLI | `cli.py` / `trendr` | `run`、`hotspots`、`hotspots-template`、`resume`、`status` |
+| Engine | `engine/state_machine.py` + `engine/{states,transitions,artifacts,recovery,executors}` | `INIT → DISCOVERY → ANALYSIS → GAP_CHECK → WRITING → VERIFY → DONE` |
+| Contracts | CSV / Markdown / BibTeX / JSON | `candidates.csv`、`matrix.csv`、`review.md`、`references.bib`、`verify.json` |
+| Runtime adapters | Claude Code / Codex / OpenClaw / CLI | Claude Code 是主 runtime；Codex 与 CLI 走 `CLIAdapter`；OpenClaw 保持 legacy 支持 |
+| Agent layer | 4 agents + runtime sibling files | `paper-scout`、`paper-analyzer`、`review-lead`、`verifier` |
+| Skill layer | 8 skills + Runtime Router | 共享 `SKILL.md`，按 runtime 切换 `claude-code.md` / `codex.md` / `SOUL.md` |
+| Data sources | 9 academic APIs + Lite hotspots | 文献检索走免费学术 API；Lite 已实现 HN / GitHub Trending / Reddit / Product Hunt 稳定 HTTP 采集 |
+| Browser automation | Chrome CDP profile `cdp` | JS-heavy 平台通过独立 agent Chrome profile，避免污染日常浏览器 |
+| Recovery / QA | heartbeat + watchdog + pytest | `run_state.json`、`heartbeat.json`、`resume_request.json`；当前测试收集 280 项 |
+
+### Tech Stack Chain
+
+```mermaid
+flowchart LR
+  PY["Python 3.10+ stdlib core"] --> CLI["CLI / slash commands"]
+  CLI --> AD["Runtime adapters"]
+  AD --> SM["v2 state machine"]
+  SM --> AG["Agents + skills"]
+  AG --> AR["File artifacts"]
+  AR --> VF["Verifier"]
+  VF --> OUT["review.md + references.bib + verify.json"]
+```
+
+## Minimal Workflow
+
+TrendR 现在有两条路径：`lite` 做热点信号输入；`basic/full` 走可恢复文献综述状态机。
+
+```mermaid
+flowchart LR
+  T["topic"] --> R["CLI profile router"]
+  R -->|lite| H["HotspotsRunner"]
+  H --> HA["hotspots_raw / summary / report"]
+  R -->|basic| I["INIT"]
+  R -->|full| I
+  I --> D["DISCOVERY"]
+  D --> A["ANALYSIS"]
+  A --> G["GAP_CHECK"]
+  G -->|coverage gap| D
+  G --> W["WRITING"]
+  W --> V["VERIFY"]
+  V -->|fix needed| W
+  V --> DONE["DONE"]
+  DONE -->|full post-run| H
+```
+
+最小产物流：
+
+```text
+topic -> candidates.csv -> notes/ + matrix.csv -> gap_report.md -> review.md + references.bib -> verify.json
+```
+
+## Next Evolution
+
+下一步不宜继续堆入口，而应优先把“可跑”进化成“可持续深挖、可复盘、可积累”。
+
+1. **做二级论文池**：把 score 3–4 的候选论文保留下来，形成 `paper-pool.csv` 的待深挖队列；Depth C 不只扩大轮数，还要支持按主题、引用、方法簇二次采样。
+2. **把 analyzer 从单轮精读改成分层分析**：先做快速结构化摘要，再对高价值论文补 full note；降低 650 篇候选到 80 篇 notes 之间的信息损失。
+3. **强化 verifier 的证据链**：把 `claim -> note -> paper_id -> bib entry` 做成显式可追踪字段，减少“引用存在但 claim 支撑弱”的灰区。
+4. **补齐 Zotero / Obsidian 网络层**：保留当前 `.bib` 手动导入路径，同时新增可选 Zotero local API 同步和共引 / 主题聚类视图。
+5. **提升运行观测**：把 `logs/latest.log`、`history`、fallback、coverage、verify issue 汇总成一次 run 的 dashboard 摘要，方便恢复和评审。
+6. **保持 Lite 独立**：热点监控继续作为 signal intake，不并入核心状态机；Full profile 只做可插拔增强，失败时降级到 Basic。
 
 ## Core Capabilities
 
